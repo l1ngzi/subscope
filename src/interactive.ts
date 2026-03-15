@@ -97,28 +97,38 @@ export const interactiveConfig = (): Promise<void> => {
 
   // ── Folder rows ──
 
-  type Row = { kind: 'label' | 'gap' | 'mode' | 'folder'; key?: string; text: string; active?: boolean }
+  type Row = { kind: 'label' | 'gap' | 'mode' | 'folder' | 'source'; key?: string; text: string; active?: boolean }
 
   const folderRows = (): Row[] => {
     const r: Row[] = []
-    const path = cur().path
-    if (!path) {
+    const p = cur().path
+    if (!p) {
       r.push({ kind: 'label', text: 'Default Mode' })
       for (const [name, m] of Object.entries(cfg.modes))
         r.push({ kind: 'mode', key: name, text: `${name}  ${D}${m.types.join(', ')}${R}`, active: cfg.defaultMode === name })
       r.push({ kind: 'gap', text: '' })
       r.push({ kind: 'label', text: 'Groups' })
     }
-    for (const f of childFolders(path)) {
-      const full = path ? `${path}/${f}` : f
+    const folders = childFolders(p)
+    for (const f of folders) {
+      const full = p ? `${p}/${f}` : f
       const all = sourceCount(full)
       const on = all.filter(s => s.active).length
       r.push({ kind: 'folder', key: full, text: `${f}  ${D}${on}/${all.length}${R}`, active: isActive(full) })
     }
+    // Show sources directly in this folder
+    const directSources = cfg.sources.filter(s => s.group === p)
+    if (directSources.length > 0 && folders.length > 0) {
+      r.push({ kind: 'gap', text: '' })
+      r.push({ kind: 'label', text: 'Sources' })
+    }
+    for (const s of directSources) {
+      r.push({ kind: 'source', key: s.id, text: `${s.name}  ${D}${s.type}${R}`, active: s.active })
+    }
     return r
   }
 
-  const selectable = (r: Row) => r.kind === 'mode' || r.kind === 'folder'
+  const selectable = (r: Row) => r.kind === 'mode' || r.kind === 'folder' || r.kind === 'source'
   const findSel = (rows: Row[], from: number, dir: 1 | -1) => {
     let i = from + dir
     while (i >= 0 && i < rows.length) { if (selectable(rows[i]!)) return i; i += dir }
@@ -268,6 +278,7 @@ export const interactiveConfig = (): Promise<void> => {
           const r = rows[cur().cursor]
           if (r?.kind === 'mode') { cfg.defaultMode = r.key!; dirty = true; draw() }
           else if (r?.kind === 'folder') { toggleFolder(r.key!); dirty = true; draw() }
+          else if (r?.kind === 'source') { const s = cfg.sources.find(x => x.id === r.key); if (s) { s.active = !s.active; dirty = true; draw() } }
           return
         }
         if (right) {
