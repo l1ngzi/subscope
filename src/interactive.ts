@@ -9,6 +9,7 @@ const DIM = esc('2m')
 const CYAN = esc('36m')
 const GRAY = esc('90m')
 const WHITE = esc('37m')
+const YELLOW = esc('33m')
 const BG_BAR = esc('48;5;236m')
 const HIDE_CURSOR = esc('?25l')
 const SHOW_CURSOR = esc('?25h')
@@ -24,42 +25,80 @@ const rows = () => process.stdout.rows || 24
 // ── Data ──
 
 interface Row {
-  kind: 'gap' | 'label' | 'mode' | 'group' | 'source'
+  kind: 'gap' | 'label' | 'mode' | 'folder' | 'source'
   key?: string
   text: string
   active?: boolean
+  depth?: number
 }
 
-const mainRows = (cfg: Config): Row[] => {
-  const r: Row[] = []
-  r.push({ kind: 'label', text: 'Default Mode' })
-  for (const [name, m] of Object.entries(cfg.modes)) {
-    r.push({
-      kind: 'mode',
-      key: name,
-      text: `${name}  ${DIM}${m.types.join(', ')}${RESET}`,
-      active: cfg.defaultMode === name,
-    })
+// Get children of a path: immediate subgroups + sources at this level
+const childrenAt = (cfg: Config, path: string) => {
+  const allGroups = [...new Set(cfg.sources.map(s => s.group))]
+  const prefix = path ? path + '/' : ''
+
+  // Find immediate child folders (next level only)
+  const childFolders = new Set<string>()
+  for (const g of allGroups) {
+    if (!g.startsWith(prefix)) continue
+    const rest = g.slice(prefix.length)
+    const nextPart = rest.split('/')[0]!
+    if (rest.includes('/')) {
+      // This is a subfolder
+      childFolders.add(nextPart)
+    } else {
+      // This is a direct child group
+      childFolders.add(nextPart)
+    }
   }
-  r.push({ kind: 'gap', text: '' })
-  r.push({ kind: 'label', text: 'Groups' })
-  for (const g of [...new Set(cfg.sources.map(s => s.group))]) {
-    const all = cfg.sources.filter(s => s.group === g)
+
+  // Find sources directly in this path
+  const sources = cfg.sources.filter(s => s.group === path)
+
+  return { folders: [...childFolders].sort(), sources }
+}
+
+const isFolderActive = (cfg: Config, path: string) =>
+  cfg.activeGroups.some(g => g === path || g.startsWith(path + '/'))
+
+const folderSourceCount = (cfg: Config, path: string) => {
+  const prefix = path + '/'
+  return cfg.sources.filter(s => s.group === path || s.group.startsWith(prefix))
+}
+
+const buildRows = (cfg: Config, path: string): Row[] => {
+  const r: Row[] = []
+  const { folders, sources } = childrenAt(cfg, path)
+
+  if (path === '') {
+    // Root: show modes first
+    r.push({ kind: 'label', text: 'Default Mode' })
+    for (const [name, m] of Object.entries(cfg.modes)) {
+      r.push({
+        kind: 'mode',
+        key: name,
+        text: `${name}  ${DIM}${m.types.join(', ')}${RESET}`,
+        active: cfg.defaultMode === name,
+      })
+    }
+    r.push({ kind: 'gap', text: '' })
+    r.push({ kind: 'label', text: 'Groups' })
+  }
+
+  for (const f of folders) {
+    const fullPath = path ? `${path}/${f}` : f
+    const all = folderSourceCount(cfg, fullPath)
     const on = all.filter(s => s.active).length
+    const hasChildren = childrenAt(cfg, fullPath).folders.length > 0 || childrenAt(cfg, fullPath).sources.length > 0
     r.push({
-      kind: 'group',
-      key: g,
-      text: `${g}  ${DIM}${on}/${all.length} sources${RESET}`,
-      active: cfg.activeGroups.includes(g),
+      kind: 'folder',
+      key: fullPath,
+      text: `${f}  ${DIM}${on}/${all.length}${RESET}`,
+      active: isFolderActive(cfg, fullPath),
     })
   }
-  return r
-}
 
-const groupRows = (cfg: Config, group: string): Row[] => {
-  const r: Row[] = []
-  r.push({ kind: 'label', text: group })
-  for (const s of cfg.sources.filter(s => s.group === group)) {
+  for (const s of sources) {
     r.push({
       kind: 'source',
       key: s.id,
@@ -67,6 +106,7 @@ const groupRows = (cfg: Config, group: string): Row[] => {
       active: s.active,
     })
   }
+
   return r
 }
 
@@ -74,54 +114,55 @@ const selectable = (row: Row) => row.kind !== 'gap' && row.kind !== 'label'
 
 // ── Render ──
 
-const render = (title: string, rowList: Row[], cursor: number, dirty: boolean, isGroup: boolean) => {
+const render = (path: string, rowList: Row[], cursor: number, dirty: boolean, inputMode: string) => {
   const w = cols()
   const h = rows()
   const out: string[] = []
 
-  out.push(`  ${BOLD}${title}${RESET}`)
+  const title = path || 'subscope config'
+  const breadcrumb = path ? path.split('/').map(p => `${BOLD}${p}${RESET}`).join(` ${DIM}/${RESET} `) : ''
+  out.push(`  ${breadcrumb || `${BOLD}${title}${RESET}`}`)
   out.push('')
 
   for (let i = 0; i < rowList.length; i++) {
     const row = rowList[i]!
     const sel = i === cursor
 
-    if (row.kind === 'gap') {
-      out.push('')
-      continue
-    }
-    if (row.kind === 'label') {
-      out.push(`  ${DIM}${row.text}${RESET}`)
-      continue
-    }
+    if (row.kind === 'gap') { out.push(''); continue }
+    if (row.kind === 'label') { out.push(`  ${DIM}${row.text}${RESET}`); continue }
 
-    const icon = row.active ? `${CYAN}\u25cf${RESET}` : `${GRAY}\u25cb${RESET}`
+    const icon = row.kind === 'folder'
+      ? (row.active ? `${CYAN}\u25b8${RESET}` : `${GRAY}\u25b8${RESET}`)
+      : (row.active ? `${CYAN}\u25cf${RESET}` : `${GRAY}\u25cb${RESET}`)
+
     const ptr = sel ? `${CYAN}\u203a${RESET}` : ' '
-    const arrow = sel && row.kind === 'group' ? `  ${DIM}\u2192${RESET}` : ''
+    const arrow = sel && row.kind === 'folder' ? `  ${DIM}\u2192${RESET}` : ''
     const label = sel ? `${BOLD}${row.text}${RESET}` : row.text
     const tag = row.kind === 'mode' && row.active ? `  ${DIM}(default)${RESET}` : ''
 
     out.push(` ${ptr} ${icon} ${label}${tag}${arrow}`)
   }
 
-  // Fill to push bar to bottom
+  // Input prompt
+  if (inputMode) {
+    out.push('')
+    out.push(`  ${YELLOW}${inputMode}${RESET}`)
+  }
+
   while (out.length < h - 2) out.push('')
 
   // Status bar
-  const nav = isGroup
-    ? '\u2191\u2193 navigate  space toggle  \u2190 back  enter save  q quit'
-    : '\u2191\u2193 navigate  space toggle  \u2192 drill in  enter save  q quit'
+  const nav = path
+    ? '\u2191\u2193 move  space toggle  \u2192 open  \u2190 back  n new folder  enter save'
+    : '\u2191\u2193 move  space toggle  \u2192 open  n new folder  enter save  q quit'
   const mark = dirty ? `${CYAN}*${RESET} ` : '  '
   const pad = Math.max(0, w - nav.length - 4)
   out.push(`${BG_BAR}${WHITE} ${mark}${DIM}${nav}${' '.repeat(pad)}${RESET}`)
 
-  // Single write: home + each line cleared to EOL + clear everything below
-  process.stdout.write(
-    HOME + HIDE_CURSOR + out.map(l => l + CLR_LINE).join('\n') + CLR_BELOW
-  )
+  process.stdout.write(HOME + HIDE_CURSOR + out.map(l => l + CLR_LINE).join('\n') + CLR_BELOW)
 }
 
-// ── Navigation helpers ──
+// ── Navigation ──
 
 const findNext = (rowList: Row[], from: number, dir: 1 | -1): number => {
   let i = from + dir
@@ -144,10 +185,19 @@ const findFirst = (rowList: Row[]): number => {
 const toggle = (cfg: Config, row: Row) => {
   if (row.kind === 'mode') {
     cfg.defaultMode = row.key!
-  } else if (row.kind === 'group') {
-    const i = cfg.activeGroups.indexOf(row.key!)
-    if (i >= 0) cfg.activeGroups.splice(i, 1)
-    else cfg.activeGroups.push(row.key!)
+  } else if (row.kind === 'folder') {
+    const path = row.key!
+    // Toggle all leaf groups under this path
+    const leafGroups = [...new Set(cfg.sources.map(s => s.group))]
+      .filter(g => g === path || g.startsWith(path + '/'))
+    const allActive = leafGroups.every(g => cfg.activeGroups.includes(g))
+    if (allActive) {
+      cfg.activeGroups = cfg.activeGroups.filter(g => g !== path && !g.startsWith(path + '/'))
+    } else {
+      for (const g of leafGroups) {
+        if (!cfg.activeGroups.includes(g)) cfg.activeGroups.push(g)
+      }
+    }
   } else if (row.kind === 'source') {
     const src = cfg.sources.find(s => s.id === row.key)
     if (src) src.active = !src.active
@@ -159,19 +209,23 @@ const toggle = (cfg: Config, row: Row) => {
 export const interactiveConfig = (): Promise<void> => {
   const cfg = load()
 
-  let screen: 'main' | 'group' = 'main'
-  let groupName = ''
-  let dirty = false
-  let mainCursor = 0
+  // Navigation stack: [{ path, cursor }]
+  const stack: { path: string; cursor: number }[] = [{ path: '', cursor: 0 }]
 
-  let rowList = mainRows(cfg)
-  let cursor = findFirst(rowList)
+  let dirty = false
+  let inputMode = '' // empty = normal, non-empty = typing folder name
+  let inputBuffer = ''
+
+  const current = () => stack[stack.length - 1]!
+
+  let rowList = buildRows(cfg, current().path)
+  current().cursor = findFirst(rowList)
 
   process.stdout.write(ALT_ON)
 
   const draw = () => {
-    const title = screen === 'main' ? 'subscope config' : groupName
-    render(title, rowList, cursor, dirty, screen === 'group')
+    rowList = buildRows(cfg, current().path)
+    render(current().path, rowList, current().cursor, dirty, inputMode ? `New folder: ${inputBuffer}\u2588` : '')
   }
 
   draw()
@@ -192,38 +246,68 @@ export const interactiveConfig = (): Promise<void> => {
     }
 
     const onKey = (key: string) => {
+      // Input mode: typing folder name
+      if (inputMode) {
+        if (key === '\r') {
+          // Create the folder (just set it as active — sources can be moved into it later)
+          if (inputBuffer.trim()) {
+            const newPath = current().path
+              ? `${current().path}/${inputBuffer.trim()}`
+              : inputBuffer.trim()
+            if (!cfg.activeGroups.includes(newPath)) {
+              cfg.activeGroups.push(newPath)
+            }
+            dirty = true
+          }
+          inputMode = ''
+          inputBuffer = ''
+          draw()
+        } else if (key === '\x1b' || key === '\x03') {
+          inputMode = ''
+          inputBuffer = ''
+          draw()
+        } else if (key === '\x7f' || key === '\b') {
+          inputBuffer = inputBuffer.slice(0, -1)
+          draw()
+        } else if (key.length === 1 && key.charCodeAt(0) >= 32) {
+          inputBuffer += key
+          draw()
+        }
+        return
+      }
+
+      // Normal mode
       if (key === '\x1b[A' || key === 'k') {
-        cursor = findNext(rowList, cursor, -1)
+        current().cursor = findNext(rowList, current().cursor, -1)
         draw()
       } else if (key === '\x1b[B' || key === 'j') {
-        cursor = findNext(rowList, cursor, 1)
+        current().cursor = findNext(rowList, current().cursor, 1)
         draw()
       } else if (key === ' ') {
-        const row = rowList[cursor]
+        const row = rowList[current().cursor]
         if (row && selectable(row)) {
           toggle(cfg, row)
           dirty = true
-          rowList = screen === 'main' ? mainRows(cfg) : groupRows(cfg, groupName)
           draw()
         }
       } else if (key === '\x1b[C' || key === 'l') {
-        const row = rowList[cursor]
-        if (row?.kind === 'group') {
-          mainCursor = cursor
-          screen = 'group'
-          groupName = row.key!
-          rowList = groupRows(cfg, groupName)
-          cursor = findFirst(rowList)
+        const row = rowList[current().cursor]
+        if (row?.kind === 'folder') {
+          stack.push({ path: row.key!, cursor: 0 })
+          rowList = buildRows(cfg, current().path)
+          current().cursor = findFirst(rowList)
           draw()
         }
       } else if (key === '\x1b[D' || key === 'h') {
-        if (screen === 'group') {
-          screen = 'main'
-          rowList = mainRows(cfg)
-          cursor = mainCursor
+        if (stack.length > 1) {
+          stack.pop()
           draw()
         }
-      } else if (key === '\r' || key === 'q' || key === '\x1b' || key === '\x03') {
+      } else if (key === 'n') {
+        inputMode = 'new'
+        inputBuffer = ''
+        draw()
+      } else if (key === '\r' || key === 'q' || key === '\x03') {
         quit()
       }
     }
