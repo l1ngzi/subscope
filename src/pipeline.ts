@@ -26,19 +26,21 @@ export const fetchAll = async (): Promise<number> => {
   )
 
   let total = 0
+  let newItems = 0
   for (const result of results) {
     if (result.status === 'fulfilled') {
       const { source, items } = result.value
-      store.save(items)
+      const added = store.save(items)
       total += items.length
-      console.log(`  ${source.name} — ${items.length} items`)
+      newItems += added
+      console.log(`  ${source.name} — ${items.length} items${added > 0 ? ` (${added} new)` : ''}`)
     } else {
       console.error(`  failed: ${result.reason}`)
     }
   }
 
   store.close()
-  return total
+  return newItems
 }
 
 const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000

@@ -39,7 +39,8 @@ export const createStore = (dbPath = DB_PATH) => {
   `)
 
   return {
-    save(items: FeedItem[]) {
+    save(items: FeedItem[]): number {
+      const before = (db.prepare('SELECT COUNT(*) as n FROM items').get() as { n: number }).n
       const tx = db.transaction(() => {
         for (const item of items) {
           insertStmt.run({
@@ -55,6 +56,8 @@ export const createStore = (dbPath = DB_PATH) => {
         }
       })
       tx()
+      const after = (db.prepare('SELECT COUNT(*) as n FROM items').get() as { n: number }).n
+      return after - before
     },
 
     query(opts: QueryOpts = {}): FeedItem[] {

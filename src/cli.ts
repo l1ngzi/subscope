@@ -6,6 +6,7 @@ import { fetchAll, read } from './pipeline.ts'
 import { detectType } from './adapters/index.ts'
 import { renderFeed, renderInteractive, renderSources, renderGroups } from './render.ts'
 import { interactiveConfig } from './interactive.ts'
+import { notify } from './notify.ts'
 import { createHash } from 'crypto'
 import type { Source } from './types.ts'
 
@@ -98,8 +99,29 @@ const commands: Record<string, () => Promise<void>> = {
     }
 
     console.log('\n  Fetching...\n')
-    const total = await fetchAll()
-    console.log(`\n  Done. ${total} items fetched.\n`)
+    const newItems = await fetchAll()
+    console.log(`\n  Done. ${newItems} new items.\n`)
+  },
+
+  watch: async () => {
+    const minutes = parseInt(args[0] ?? '10')
+    const ms = minutes * 60_000
+    console.log(`\n  Watching every ${minutes}m. Ctrl+C to stop.\n`)
+
+    const tick = async () => {
+      const time = new Date().toLocaleTimeString()
+      process.stdout.write(`  [${time}] Fetching... `)
+      const newItems = await fetchAll().catch(() => 0)
+      process.stdout.write(`${newItems} new\n`)
+      if (newItems > 0) {
+        notify('subscope', `${newItems} new item${newItems > 1 ? 's' : ''}`)
+      }
+    }
+
+    await tick()
+    setInterval(tick, ms)
+    // Keep alive
+    await new Promise(() => {})
   },
 
   group: async () => {
