@@ -6,7 +6,7 @@ A super subscription that merges multiple first-hand sources into one terminal f
 
 You follow AI companies and academic journals across blogs, X, YouTube, support pages, GitHub releases, RSS feeds. The information is scattered across dozens of URLs. subscope pulls it all into one place, organized by company, filterable by type, searchable, with PDF downloads for papers.
 
-Currently tracks 6 AI companies (Anthropic, Claude, OpenAI, DeepMind, DeepSeek, xAI), 2 photonics journals (Nature Photonics, Light: Science & Applications), and 6 economics/finance sources (Federal Reserve, PBOC, NBS, BLS, BEA, SEC EDGAR). 29 sources, all fetched concurrently in 2 seconds.
+Currently tracks 6 AI companies (Anthropic, Claude, OpenAI, DeepMind, DeepSeek, xAI), 2 photonics journals (Nature Photonics, Light: Science & Applications), and 9 economics/finance institutions (Federal Reserve, ECB, PBOC, NBS, BLS, BEA, SEC EDGAR, US Treasury, IMF). 32 sources, all fetched concurrently in ~2 seconds.
 
 ## Quick start
 
@@ -25,7 +25,7 @@ subscope auth academic       # Papers: copy Cookie header from nature.com, run t
 Fetch and read:
 
 ```
-subscope fetch               # pull all sources (29 sources, ~2s)
+subscope fetch               # pull all sources (32 sources, ~2s)
 subscope                     # interactive browser with search
 ```
 
@@ -35,7 +35,7 @@ subscope                     # interactive browser with search
 subscope                     # browse items (up/down, enter to open, / to search, g for PDF)
 subscope quick               # social media only (X + YouTube)
 subscope formal              # official sources only (blogs, docs, support)
-subscope eco                 # economics & finance only (Fed, PBOC, NBS, BLS, BEA, SEC)
+subscope eco                 # economics & finance only (Fed, ECB, PBOC, NBS, BLS, BEA, SEC, Treasury, IMF)
 subscope --all               # no time filter
 subscope -n 10               # latest 10
 subscope -g ai/anthropic     # filter by group
@@ -53,7 +53,7 @@ subscope watch-uninstall     # remove scheduled task
 Article reader (pipe-friendly for LLMs):
 
 ```
-subscope read <url>          # extract clean article text from any eco source
+subscope read <url>          # extract clean article text from any source
 subscope read <url> | llm    # pipe to LLM for analysis
 ```
 
@@ -87,7 +87,7 @@ The default `subscope` command opens an interactive browser:
 Source (YAML) --> Adapter (fetch + parse) --> Store (SQLite) --> Render (TUI)
 ```
 
-Site-specific adapters: Anthropic (RSC JSON payload), Claude blog (HTML articles), Claude support (Intercom), DeepSeek (changelog HTML), xAI (news page), PBOC (HTML scrape), NBS (RSS + HTML), BLS (RSS indicator parser), BEA (HTML scrape), SEC EDGAR (JSON API).
+Site-specific adapters: Anthropic (RSC JSON payload), Claude blog (HTML articles), Claude support (Intercom), DeepSeek (changelog HTML), xAI (news page), PBOC (HTML scrape), NBS (RSS + HTML), BLS (RSS indicator parser), BEA (HTML scrape), SEC EDGAR (JSON API), US Treasury (HTML scrape), IMF (Playwright fallback).
 
 Generic adapters: RSS/Atom feeds (auto-detect XML), HTML scraping (link extraction), YouTube (ytInitialData JSON), X/Twitter (native GraphQL API), GitHub (Atom release feeds).
 
@@ -111,16 +111,19 @@ photonics/
   (nature photonics, light sci & app)
 econ/
   fed         (Federal Reserve FOMC statements, monetary policy)
+  ecb         (European Central Bank press releases, speeches)
   pboc        (中国人民银行 news, financial data reports)
   nbs         (国家统计局 CPI, GDP, PMI data releases)
   bls         (Bureau of Labor Statistics CPI, unemployment, payrolls)
   bea         (Bureau of Economic Analysis GDP, personal income, trade)
   sec         (SEC EDGAR 8-K company filings)
+  treasury    (US Treasury sanctions, fiscal policy, debt)
+  imf         (IMF global economic assessments, country reports)
 ```
 
 ## Stack
 
-TypeScript, Bun (runtime + bun:sqlite), cheerio, yaml. No heavy dependencies.
+TypeScript, Bun (runtime + bun:sqlite), cheerio, yaml. Playwright as optional fallback for anti-bot sites.
 
 ## Files
 

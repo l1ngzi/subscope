@@ -10,8 +10,8 @@ subscope is a personal CLI feed aggregator. It pulls first-hand information from
 
 - Pure raw information, no AI processing in the feed pipeline
 - Each source gets the best possible adapter, not a generic one
-- Fast: 29 sources fetch concurrently in 2 seconds
-- No heavy dependencies: no Playwright, no Puppeteer, no Python
+- Fast: 32 sources fetch concurrently in ~2 seconds
+- Playwright as optional fallback for anti-bot sites (BLS, IMF), not in the hot path
 - Code should read like it was written by someone who cares
 
 ## Tech stack
@@ -51,7 +51,9 @@ src/
       bls.ts                Bureau of Labor Statistics RSS indicator parser
       bea.ts                Bureau of Economic Analysis releases scraper
       sec.ts                SEC EDGAR JSON API (filing search)
-  reader.ts                 Article full-text extractor (per-site selectors)
+      treasury.ts           US Treasury press releases scraper
+      imf.ts                IMF news scraper (Playwright fallback)
+  reader.ts                 Article full-text extractor (per-site CSS selectors + Playwright fallback)
 ```
 
 ## Key architectural decisions
@@ -78,10 +80,16 @@ Path-based strings: `ai/anthropic`, `photonics`. Filtering with `-g ai` matches 
 Alternate screen buffer. Item-by-item navigation with auto-scrolling viewport. Search box at top (cursor = -1). NEW badges tracked via `seen.json`. PDF download via URL pattern matching (Nature `.pdf` suffix, arXiv `/pdf/` path).
 
 ### Economics & Finance sources
-Six sources under the `econ/` group: Federal Reserve (RSS), PBOC (HTML scrape), NBS (RSS/HTML), BLS (RSS with full browser headers to bypass Akamai), BEA (HTML scrape), SEC EDGAR (JSON API at `efts.sec.gov`). Each has a dedicated adapter with site-specific parsing. Color-coded: Fed=sky blue, PBOC=red, NBS=gold, BLS/BEA=olive, SEC=navy.
+Nine sources under the `econ/` group: Federal Reserve (RSS), ECB (RSS), PBOC (HTML scrape), NBS (RSS/HTML), BLS (RSS with `Sec-Fetch-*` headers), BEA (HTML scrape), SEC EDGAR (JSON API), US Treasury (HTML scrape), IMF (Playwright fallback). Each has a dedicated adapter. Color-coded: Fed=sky blue, ECB=blue, PBOC=red, NBS=gold, BLS/BEA=olive, SEC=navy, Treasury=yellow, IMF=light blue.
 
 ### Article reader (`subscope read`)
-Fetches article URL, extracts clean text using per-site CSS selectors (BEA: `.field--name-body.field--item`, PBOC: `#zoom`, NBS: `.txt-content`, Fed: `#article .col-sm-8`). Output is `# Title\n\ntext` — pipe-friendly for LLM consumption. Generic fallback for unknown sites.
+Pipe-friendly full-text extractor for LLM consumption. Output: `# Title\n\ntext`. Per-site CSS selectors for all blog-type sources:
+- **AI**: Anthropic (CSS modules `Body-module`), Claude blog (`.u-rich-text-blog`), Claude Support (`.article_body`), OpenAI (`article`), DeepMind (`main`), DeepSeek (`.theme-doc-markdown`), xAI (`.prose.prose-invert`)
+- **Econ**: Fed (`#article .col-sm-8`), ECB (`main .section`), PBOC (`#zoom`), NBS (`.txt-content`), BLS (Playwright + Chrome anti-detection), BEA (`.field--name-body`), Treasury (`og:description` meta), IMF (`article .column-padding` via Playwright), SEC EDGAR (auto-follow `-index.htm` → document, company name from submissions API)
+- **Other**: GitHub releases (`[data-test-selector="body-content"]`)
+- Anti-bot bypass: Playwright spawns system Chrome with `--disable-blink-features=AutomationControlled`, `navigator.webdriver=false`, `--ignore-certificate-errors`
+- Tables: colspan/rowspan grid extraction, compound headers flattened to `Group: Column` format
+- Dedup: headings matching title auto-removed; share buttons, video tags, nav stripped
 
 ### Thread merging (X)
 Group tweets by `conversation_id_str`. Walk `in_reply_to_status_id_str` chain for threads missing conversation_id. Root tweet becomes title, replies concatenated into summary.
@@ -120,7 +128,7 @@ If the site has RSS or standard HTML, the generic website adapter handles it aut
 - Error handling: adapters throw on auth issues, return `[]` on parse failures. Pipeline uses `Promise.allSettled` so one failure doesn't block others.
 - Text cleanup: `cleanTweetText()` strips t.co links. `cleanText()` strips HTML tags and collapses whitespace.
 - TLS: all fetch calls use `tls: { rejectUnauthorized: false }` (Bun-specific) to handle proxy/cert issues with government sites.
-- Anti-bot: BLS requires full `Sec-Fetch-*` browser headers. SEC EDGAR requires declared User-Agent.
+- Anti-bot: BLS requires full `Sec-Fetch-*` browser headers. SEC EDGAR requires declared User-Agent. BLS/IMF article pages use Playwright with system Chrome as fallback.
 
 ## Testing
 
@@ -135,7 +143,7 @@ When committing changes, always update these docs together:
 
 ## Platform notes
 
-- Bun + Playwright doesn't work on Windows (pipe communication bug, oven-sh/bun#27977). That's why X uses native GraphQL instead.
+- Bun + Playwright doesn't work on Windows (pipe communication bug, oven-sh/bun#27977). That's why X uses native GraphQL instead. Playwright is used via `node -e` subprocess for article reading (BLS, IMF) — not through Bun directly.
 - Windows toast notifications via PowerShell inline script.
 - Clipboard read via `powershell Get-Clipboard`.
 - `cmd /c start` to open URLs in default browser.
