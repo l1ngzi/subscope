@@ -65,11 +65,117 @@ const SITES: SiteRule[] = [
     },
     title: 'h2, h1, title',
   },
+  {
+    test: u => u.includes('ecb.europa.eu'),
+    selector: 'main .section',
+    title: 'main .title h1, title',
+  },
+  {
+    test: u => u.includes('home.treasury.gov'),
+    selector: 'article, .node__content',
+    title: 'title',
+    cleanTitle: (t: string) => t.replace(/\s*\|\s*U\.S\. Department.*$/, '').trim(),
+    // Treasury renders content via JS; fallback: extract from og:description meta tag
+    pick: ($: cheerio.CheerioAPI) => {
+      const $article = $('article .field--name-body .field__item')
+      if ($article.length && $article.text().trim().length > 100) return $article
+      // JS-rendered page: build content from og:description
+      const desc = $('meta[property="og:description"]').attr('content')
+      if (desc) {
+        const $div = $('<div>')
+        // Split into paragraphs on double-space or sentence boundaries
+        desc.split(/\s{2,}/).forEach(p => $div.append(`<p>${p.trim()}</p>`))
+        return $div
+      }
+      return $('body')
+    },
+  },
+  {
+    test: u => u.includes('imf.org'),
+    selector: 'article .column-padding, article',
+    title: 'h1, title',
+    cleanTitle: (t: string) => t.replace(/\s*[-–]\s*IMF$/, '').trim(),
+  },
+  // ── AI companies ──
+  {
+    test: u => u.includes('anthropic.com'),
+    selector: 'article',
+    title: 'h1',
+    cleanTitle: (t: string) => t.replace(/\s*[\|–—]\s*Anthropic$/, '').trim(),
+    pick: ($: cheerio.CheerioAPI) => {
+      // CSS modules: Body-module-scss-module__HASH__body
+      return $('[class*="Body-module"][class*="__body"]').first()
+    },
+  },
+  {
+    test: u => /claude\.com\/blog\/.+/.test(u),
+    selector: '.u-rich-text-blog',
+    title: 'h1',
+    pick: ($: cheerio.CheerioAPI) => {
+      const $body = $('.u-rich-text-blog:not(.w-condition-invisible)').first().clone()
+      $body.find('figure').remove()
+      return $body
+    },
+  },
+  {
+    test: u => u.includes('support.claude.com') && u.includes('/articles/'),
+    selector: '.article_body article',
+    title: 'h1',
+    pick: ($: cheerio.CheerioAPI) => {
+      const $article = $('.article_body article').clone()
+      $article.find('section.related_articles').remove()
+      return $article
+    },
+  },
+  {
+    test: u => u.includes('api-docs.deepseek.com'),
+    selector: '.theme-doc-markdown.markdown',
+    title: 'h1',
+    cleanTitle: (t: string) => t.replace(/\s*\|.*$/, '').trim(),
+  },
+  {
+    test: u => u.includes('x.ai/news/'),
+    selector: 'article, main',
+    title: 'h1',
+    cleanTitle: (t: string) => t.replace(/\s*\|\s*xAI$/, '').trim(),
+    pick: ($: cheerio.CheerioAPI) => {
+      const $prose = $('.prose.prose-invert').first().clone()
+      if (!$prose.length) return $prose
+      $prose.find('[class*="not-prose"]').remove()
+      return $prose
+    },
+  },
+  {
+    test: u => u.includes('openai.com/index/') || u.includes('openai.com/research/'),
+    selector: 'article',
+    title: 'h1',
+    cleanTitle: (t: string) => t.replace(/\s*\|\s*OpenAI$/, '').trim(),
+  },
+  {
+    test: u => u.includes('deepmind.google'),
+    selector: 'main',
+    title: 'h1',
+    cleanTitle: (t: string) => t.replace(/\s*[—–-]\s*Google DeepMind$/, '').trim(),
+  },
+  // ── Other ──
+  {
+    test: u => u.includes('github.com') && /\/releases\/tag\//.test(u),
+    selector: '.markdown-body',
+    title: 'h1',
+    pick: ($: cheerio.CheerioAPI) => {
+      return $('[data-test-selector="body-content"]').first()
+    },
+  },
 ]
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 
 export const readArticle = async (url: string): Promise<{ title: string; text: string }> => {
+  // X/Twitter: use oembed API for tweets (no auth needed)
+  if ((url.includes('x.com/') || url.includes('twitter.com/')) && url.includes('/status/')) {
+    return readTweet(url)
+  }
+
   // SEC EDGAR: filing index pages → auto-follow to the actual document
   if (url.includes('sec.gov') && url.includes('-index.htm')) {
     const resolved = await resolveEdgarDoc(url)
@@ -274,6 +380,17 @@ const extractText = ($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): string =
     .replace(/\n{3,}/g, '\n\n')         // max 2 consecutive newlines
     .replace(/\u00a0/g, ' ')           // replace nbsp
     .trim()
+}
+
+// X/Twitter: fetch tweet text via oembed API
+const readTweet = async (url: string): Promise<{ title: string; text: string }> => {
+  const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`
+  const res = await fetch(oembedUrl)
+  if (!res.ok) throw new Error(`Tweet not found (${res.status})`)
+  const data = await res.json() as { author_name: string; html: string }
+  const $ = cheerio.load(data.html)
+  const text = $('blockquote p').map((_, el) => $(el).text()).get().join('\n\n')
+  return { title: data.author_name || 'Tweet', text }
 }
 
 // SEC EDGAR: resolve filing index page → main document URL + title
