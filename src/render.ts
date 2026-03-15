@@ -73,9 +73,11 @@ const formatItem = (item: FeedItem, maxWidth: number): string[] => {
   const color = sourceColor(item.sourceName, item.sourceType)
   const lines: string[] = []
 
-  lines.push(` ${color}\u250c\u2500${RESET} ${BOLD}${truncate(item.title, maxWidth)}${RESET}`)
+  const cleanText = (s: string) => s.replace(/<[^>]*>/g, '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+  lines.push(` ${color}\u250c\u2500${RESET} ${BOLD}${truncate(cleanText(item.title), maxWidth)}${RESET}`)
   if (item.summary) {
-    const cleaned = item.summary.replace(/<[^>]*>/g, '').trim()
+    const cleaned = cleanText(item.summary)
     if (cleaned) {
       lines.push(` ${color}\u2502${RESET}  ${DIM}${truncate(cleaned, maxWidth)}${RESET}`)
     }
