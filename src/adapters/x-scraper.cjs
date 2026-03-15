@@ -31,20 +31,19 @@ async function main() {
     timeout: 20000,
   })
 
-  // Wait for initial tweets
   await page.waitForSelector('article', { timeout: 10000 }).catch(() => {})
 
-  // Scroll multiple times to load more tweets
+  // Scroll to load more tweets
   for (let i = 0; i < 3; i++) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await page.waitForTimeout(1500)
   }
 
-  // Scroll back to top to ensure all loaded
-  await page.evaluate(() => window.scrollTo(0, 0))
-  await page.waitForTimeout(500)
-
   // Extract tweets from DOM
+  // X profile shows threads as consecutive articles.
+  // Between threads there's usually a "Show this thread" link or a gap.
+  // We detect threads by checking if an article has the "thread indicator"
+  // (a vertical line connecting to the next tweet).
   const tweets = await page.evaluate((targetUser) => {
     const articles = document.querySelectorAll('article')
     const results = []
@@ -60,21 +59,19 @@ async function main() {
       const idMatch = href.match(/\/status\/(\d+)/)
       if (!idMatch) continue
 
-      // Check if this is a reply by looking for "Replying to" text
-      const replyingTo = article.querySelector('[data-testid="reply"]')
-
-      // Check the tweet author — look for the username in status link
       const tweetUser = href.split('/')[1]?.toLowerCase() || ''
-
-      // Only collect tweets from the target user
       if (tweetUser !== targetUser.toLowerCase()) continue
+
+      // Detect if this tweet connects to the next (thread indicator)
+      // X uses a vertical line/connector between thread tweets
+      const hasThreadLine = article.querySelector('[data-testid="Tweet-User-Avatar"] + div') !== null
+        || article.innerHTML.includes('self-stretch')
 
       results.push({
         id: idMatch[1],
         text: textEl.innerText || '',
         date: timeEl ? timeEl.getAttribute('datetime') : '',
-        // DOM doesn't directly expose reply chain, but we can detect
-        // consecutive tweets from same user as a thread
+        isPartOfThread: false, // will be set in post-processing
       })
     }
     return results
@@ -82,32 +79,40 @@ async function main() {
 
   await browser.close()
 
-  // Post-process: detect threads by consecutive tweets from same time
-  // (X shows threads as consecutive articles with close timestamps)
-  if (tweets.length > 1) {
-    for (let i = 1; i < tweets.length; i++) {
-      const prev = tweets[i - 1]
-      const curr = tweets[i]
-      if (prev.date && curr.date) {
-        const gap = Math.abs(new Date(prev.date).getTime() - new Date(curr.date).getTime())
-        // Tweets within 2 minutes of each other from same user = likely thread
-        if (gap < 120_000) {
-          curr.replyToId = prev.id
-          curr.convId = tweets.find((t, j) => {
-            // Walk back to find thread start
-            let k = i
-            while (k > 0 && tweets[k].replyToId) k--
-            return j === k
-          })?.id || prev.id
-        }
-      }
-    }
+  // Post-process: detect threads
+  // On a profile page, threads appear as consecutive tweets from the same user.
+  // The FIRST tweet in a group of consecutive same-user tweets is the root.
+  // Subsequent ones are replies in the thread.
+  // A "gap" (different date by > 1 hour) between consecutive tweets starts a new thread.
+  const ONE_HOUR = 3600_000
+
+  for (let i = 0; i < tweets.length; i++) {
+    tweets[i].replyToId = null
+    tweets[i].convId = tweets[i].id
   }
 
-  // Set convId for root tweets
-  for (const t of tweets) {
-    if (!t.convId) t.convId = t.id
-    if (!t.replyToId) t.replyToId = null
+  for (let i = 1; i < tweets.length; i++) {
+    const prev = tweets[i - 1]
+    const curr = tweets[i]
+
+    if (!prev.date || !curr.date) continue
+
+    const gap = Math.abs(new Date(curr.date).getTime() - new Date(prev.date).getTime())
+
+    // Consecutive tweets within 1 hour = same thread
+    if (gap < ONE_HOUR) {
+      // Find the thread root by walking back
+      let rootIdx = i - 1
+      while (rootIdx > 0 && tweets[rootIdx].replyToId !== null) {
+        rootIdx--
+      }
+      curr.replyToId = prev.id
+      curr.convId = tweets[rootIdx].id
+      // Also update all tweets in this thread to share convId
+      for (let j = rootIdx; j <= i; j++) {
+        tweets[j].convId = tweets[rootIdx].id
+      }
+    }
   }
 
   process.stdout.write(JSON.stringify(tweets))
