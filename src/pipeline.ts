@@ -1,4 +1,4 @@
-import { load } from './config.ts'
+import { load, activeSources } from './config.ts'
 import { createStore } from './store.ts'
 import { resolve } from './adapters/index.ts'
 import type { FeedItem, SourceType } from './types.ts'
@@ -8,6 +8,7 @@ export interface ReadOpts {
   sourceType?: SourceType
   since?: string
   all?: boolean
+  group?: string
 }
 
 export const fetchAll = async (): Promise<number> => {
@@ -15,6 +16,7 @@ export const fetchAll = async (): Promise<number> => {
   const store = createStore()
   let total = 0
 
+  // Fetch ALL sources (not just active), so data is ready when groups are toggled
   for (const source of config.sources) {
     const adapter = resolve(source.url)
     try {
@@ -34,14 +36,29 @@ export const fetchAll = async (): Promise<number> => {
 const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000
 
 export const read = (opts: ReadOpts = {}): { items: FeedItem[]; olderCount: number } => {
+  const config = load()
+  const sources = activeSources(config, opts.group)
+  const sourceIds = sources.map(s => s.id)
+
+  if (sourceIds.length === 0) {
+    return { items: [], olderCount: 0 }
+  }
+
   const store = createStore()
 
   const since = opts.all
     ? undefined
     : (opts.since ?? new Date(Date.now() - TWO_WEEKS).toISOString())
 
-  const items = store.query({ limit: opts.limit, sourceType: opts.sourceType, since })
-  const olderCount = since ? store.count({ sourceType: opts.sourceType, since }) : 0
+  const items = store
+    .query({ limit: opts.limit, sourceType: opts.sourceType, since })
+    .filter(item => sourceIds.includes(item.sourceId))
+
+  const olderCount = since
+    ? store.query({ sourceType: opts.sourceType }).filter(item =>
+        sourceIds.includes(item.sourceId) && item.publishedAt < since
+      ).length
+    : 0
 
   store.close()
   return { items, olderCount }

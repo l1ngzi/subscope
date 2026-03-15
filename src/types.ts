@@ -5,6 +5,8 @@ export interface Source {
   url: string
   type: SourceType
   name: string
+  group: string
+  active: boolean
   addedAt: string
 }
 

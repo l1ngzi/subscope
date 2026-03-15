@@ -173,7 +173,7 @@ export const renderInteractive = (items: FeedItem[]): Promise<void> => {
 
 // ── sources list ──
 
-export const renderSources = (sources: { id: string; type: string; name: string; url: string }[]): void => {
+export const renderSources = (sources: { id: string; type: string; name: string; url: string; group?: string; active?: boolean }[]): void => {
   if (sources.length === 0) {
     console.log(`\n${DIM}  No sources. Add one with: subscope add <url>${RESET}\n`)
     return
@@ -181,8 +181,30 @@ export const renderSources = (sources: { id: string; type: string; name: string;
 
   console.log()
   for (const s of sources) {
-    console.log(`  ${BOLD}${s.id}${RESET}  ${CYAN}${s.type.padEnd(8)}${RESET}  ${s.name}`)
-    console.log(`          ${DIM}${s.url}${RESET}`)
+    const status = s.active === false ? `${GRAY}\u25cb${RESET}` : `${CYAN}\u25cf${RESET}`
+    const grp = s.group ? `${DIM}[${s.group}]${RESET}` : ''
+    console.log(`  ${status} ${BOLD}${s.id}${RESET}  ${s.name}  ${grp}`)
+    console.log(`             ${DIM}${s.url}${RESET}`)
   }
+  console.log()
+}
+
+export const renderGroups = (config: { activeGroups: string[]; sources: { group: string; active?: boolean }[] }): void => {
+  const groups = [...new Set(config.sources.map(s => s.group))]
+  if (groups.length === 0) {
+    console.log(`\n${DIM}  No groups.${RESET}\n`)
+    return
+  }
+
+  console.log()
+  for (const g of groups) {
+    const active = config.activeGroups.includes(g)
+    const icon = active ? `${CYAN}\u25cf${RESET}` : `${GRAY}\u25cb${RESET}`
+    const sources = config.sources.filter(s => s.group === g)
+    const activeCount = sources.filter(s => s.active !== false).length
+    const label = active ? `${BOLD}${g}${RESET}` : `${GRAY}${g}${RESET}`
+    console.log(`  ${icon} ${label}  ${DIM}${activeCount}/${sources.length} sources${RESET}`)
+  }
+  console.log(`\n  ${DIM}subscope group <name> on/off${RESET}`)
   console.log()
 }
