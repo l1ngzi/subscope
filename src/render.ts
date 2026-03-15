@@ -219,7 +219,7 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
     // Search bar (always at top)
     const searchFocused = cursor === -1
     if (searchFocused) {
-      lines.push(`  ${CYAN}\u25b6${RESET} ${DIM}search:${RESET} ${search}\x1b[7m \x1b[27m`)
+      lines.push(`  ${c(36)}\u25b6${RESET} ${DIM}search:${RESET} ${search}\x1b[7m \x1b[27m`)
     } else if (search) {
       lines.push(`  ${DIM}search: ${search}${RESET}  ${GRAY}(${items.length} results)${RESET}`)
     } else {
