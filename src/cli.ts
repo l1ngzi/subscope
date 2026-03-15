@@ -9,111 +9,6 @@ import { interactiveConfig } from './interactive.ts'
 import { notify } from './notify.ts'
 import { readArticle } from './reader.ts'
 
-const RESET = '\x1b[0m'
-const BOLD = '\x1b[1m'
-const DIM = '\x1b[2m'
-const CYAN = '\x1b[36m'
-
-const renderForTTY = (title: string, text: string): string => {
-  const lines = text.split('\n')
-  const out: string[] = []
-  out.push(`\n  ${CYAN}${BOLD}${title}${RESET}\n`)
-
-  let i = 0
-  while (i < lines.length) {
-    const line = lines[i]!
-
-    // Detect Markdown table block: consecutive | lines with a |---| separator somewhere
-    if (line.startsWith('|')) {
-      const headerRows: string[][] = []
-      const dataRows: string[][] = []
-      let foundSep = false
-      while (i < lines.length && lines[i]!.startsWith('|')) {
-        const row = lines[i]!
-        if (row.includes('---')) { foundSep = true; i++; continue }
-        const cells = row.split('|').slice(1, -1).map(c => c.trim())
-        if (!foundSep) headerRows.push(cells); else dataRows.push(cells)
-        i++
-      }
-      if (foundSep && (headerRows.length || dataRows.length)) {
-        out.push(renderBoxTable(headerRows, dataRows))
-      }
-      continue
-    }
-
-    // Headings — skip if duplicate of main title
-    if (line.startsWith('## ')) {
-      const heading = line.slice(3).trim()
-      if (heading !== title.trim()) {
-        out.push(`\n  ${BOLD}${heading}${RESET}\n`)
-      }
-      i++; continue
-    }
-
-    // Normal text — indent
-    if (line.trim()) {
-      out.push(`  ${line}`)
-    } else {
-      out.push('')
-    }
-    i++
-  }
-  return out.join('\n')
-}
-
-// CJK characters take 2 terminal columns
-const displayWidth = (s: string): number => {
-  let w = 0
-  for (const ch of s) {
-    const cp = ch.codePointAt(0)!
-    // CJK Unified Ideographs, CJK symbols, fullwidth forms, Hangul
-    w += (cp >= 0x2E80 && cp <= 0x9FFF) || (cp >= 0xF900 && cp <= 0xFAFF) ||
-         (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF00 && cp <= 0xFF60) ||
-         (cp >= 0xAC00 && cp <= 0xD7AF) || (cp >= 0x20000 && cp <= 0x2FA1F) ? 2 : 1
-  }
-  return w
-}
-
-const renderBoxTable = (headerRows: string[][], dataRows: string[][]): string => {
-  const allRows = [...headerRows, ...dataRows]
-  const colCount = Math.max(...allRows.map(r => r.length))
-  const widths: number[] = Array(colCount).fill(0)
-  for (const row of allRows) {
-    for (let c = 0; c < row.length; c++) {
-      widths[c] = Math.max(widths[c]!, displayWidth(row[c] ?? ''))
-    }
-  }
-
-  const pad = (s: string, w: number) => s + ' '.repeat(Math.max(0, w - displayWidth(s)))
-  const H = '\u2500', V = '\u2502', TL = '\u250c', TR = '\u2510', BL = '\u2514', BR = '\u2518'
-  const LT = '\u251c', RT = '\u2524', TT = '\u252c', BT = '\u2534', CR = '\u253c'
-
-  const border = (l: string, m: string, r: string) =>
-    `  ${DIM}${l}${widths.map(w => H.repeat(w + 2)).join(m)}${r}${RESET}`
-
-  const fmtRow = (cells: string[], bold = false) => {
-    const parts: string[] = []
-    for (let i = 0; i < colCount; i++) parts.push(` ${pad(cells[i] ?? '', widths[i]!)} `)
-    const s = parts.join(`${DIM}${V}${RESET}`)
-    return `  ${DIM}${V}${RESET}${bold ? BOLD : ''}${s}${bold ? RESET : ''}${DIM}${V}${RESET}`
-  }
-
-  // If table is wider than terminal, fall back to plain text
-  const totalWidth = widths.reduce((a, w) => a + w + 3, 1) + 2
-  const termCols = process.stdout.columns || 120
-  if (totalWidth > termCols) {
-    const md = [...headerRows, ...dataRows].map(cells => '  | ' + cells.join(' | ') + ' |')
-    return md.join('\n')
-  }
-
-  const lines: string[] = []
-  lines.push(border(TL, TT, TR))
-  for (const row of headerRows) lines.push(fmtRow(row, true))
-  lines.push(border(LT, CR, RT))
-  for (const row of dataRows) lines.push(fmtRow(row))
-  lines.push(border(BL, BT, BR))
-  return lines.join('\n')
-}
 import { createHash } from 'crypto'
 import type { Source } from './types.ts'
 
@@ -452,11 +347,7 @@ Write-Output "ok"
     }
     try {
       const { title, text } = await readArticle(url)
-      if (process.stdout.isTTY) {
-        console.log(renderForTTY(title, text))
-      } else {
-        console.log(`# ${title}\n\n${text}`)
-      }
+      console.log(`# ${title}\n\n${text}`)
     } catch (e: any) {
       console.error(`Failed to read: ${e.message}`)
       process.exit(1)

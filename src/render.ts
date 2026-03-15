@@ -1,5 +1,4 @@
 import type { FeedItem } from './types.ts'
-import { readArticle } from './reader.ts'
 
 // ── ANSI palette ──
 
@@ -278,90 +277,11 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
     const pos = cursor >= 0 ? `${cursor + 1}/${items.length}` : `${items.length} items`
     const hint = cursor === -1
       ? 'type to search  \u2193 browse  q quit'
-      : '\u2191\u2193 browse  / search  enter open  r read  g pdf  q quit'
+      : '\u2191\u2193 browse  / search  enter open  g pdf  q quit'
     const gap = Math.max(1, cols() - pos.length - hint.length - 4)
     lines.push(`${BG_BAR}${WHITE} ${pos}${' '.repeat(gap)}${DIM}${hint}${RESET}`)
 
     process.stdout.write(`\x1b[H\x1b[?25l${lines.map(l => l + '\x1b[K').join('\n')}\x1b[J`)
-  }
-
-  // ── Reader mode state ──
-  let readerMode = false
-  let readerTitle = ''
-  let readerLines: string[] = []
-  let readerScroll = 0
-  let readerLoading = false
-
-  const wrapText = (text: string, width: number): string[] => {
-    const result: string[] = []
-    for (const line of text.split('\n')) {
-      if (line.length <= width) { result.push(line); continue }
-      let remaining = line
-      while (remaining.length > width) {
-        // Find last space within width
-        let breakAt = remaining.lastIndexOf(' ', width)
-        if (breakAt <= 0) breakAt = width
-        result.push(remaining.slice(0, breakAt))
-        remaining = remaining.slice(breakAt).trimStart()
-      }
-      if (remaining) result.push(remaining)
-    }
-    return result
-  }
-
-  const drawReader = () => {
-    const termW = cols()
-    const termH = rows()
-    const contentW = termW - 4 // 2 char indent each side
-    const lines: string[] = []
-
-    // Title
-    lines.push(`  ${BOLD}${readerTitle}${RESET}`)
-    lines.push('')
-
-    if (readerLoading) {
-      lines.push(`  ${DIM}Loading...${RESET}`)
-    } else {
-      // Scrollable content
-      const visible = termH - 4 // title + blank + status bar + margin
-      const end = Math.min(readerScroll + visible, readerLines.length)
-      for (let i = readerScroll; i < end; i++) {
-        lines.push(`  ${readerLines[i]}`)
-      }
-    }
-
-    while (lines.length < termH - 1) lines.push('')
-
-    // Status bar
-    const pos = readerLines.length > 0
-      ? `${Math.min(readerScroll + 1, readerLines.length)}/${readerLines.length}`
-      : ''
-    const idx = Math.max(0, cursor)
-    const nav = `${idx + 1}/${items.length}`
-    const hint = '\u2191\u2193/jk scroll  space/b page  h/l prev/next  esc back'
-    const gap = Math.max(1, termW - pos.length - nav.length - hint.length - 6)
-    lines.push(`${BG_BAR}${WHITE} ${nav} ${pos}${' '.repeat(gap)}${DIM}${hint}${RESET}`)
-
-    process.stdout.write(`\x1b[H\x1b[?25l${lines.map(l => l + '\x1b[K').join('\n')}\x1b[J`)
-  }
-
-  const openReader = async (itemIdx: number) => {
-    readerMode = true
-    readerLoading = true
-    readerScroll = 0
-    readerTitle = items[itemIdx]!.title
-    drawReader()
-
-    try {
-      const { title, text } = await readArticle(items[itemIdx]!.url)
-      readerTitle = title
-      readerLines = wrapText(text, cols() - 4)
-    } catch (e: any) {
-      readerTitle = items[itemIdx]!.title
-      readerLines = [`Failed to load: ${e.message}`]
-    }
-    readerLoading = false
-    drawReader()
   }
 
   process.stdout.write('\x1b[?1049h')
@@ -440,44 +360,7 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
     const onKey = (key: string) => {
       if (key === '\x03') { cleanup(); return } // ctrl-c always quits
 
-      // ── Reader mode ──
-      if (readerMode) {
-        // Only bare Esc (length 1) exits — not arrow key prefixes
-        if ((key === '\x1b' && key.length === 1) || key === 'q') {
-          readerMode = false; draw(); return
-        }
-        const visible = rows() - 4
-        const maxScroll = Math.max(0, readerLines.length - visible)
-        // Scroll up: arrow / k / page-up
-        if (key === '\x1b[A' || key === 'k') {
-          readerScroll = Math.max(0, readerScroll - 1); drawReader(); return
-        }
-        // Scroll down: arrow / j
-        if (key === '\x1b[B' || key === 'j') {
-          readerScroll = Math.min(maxScroll, readerScroll + 1); drawReader(); return
-        }
-        // Page down: space
-        if (key === ' ') {
-          readerScroll = Math.min(maxScroll, readerScroll + visible); drawReader(); return
-        }
-        // Page up: b
-        if (key === 'b') {
-          readerScroll = Math.max(0, readerScroll - visible); drawReader(); return
-        }
-        // Previous article: left / h
-        if (key === '\x1b[D' || key === 'h') {
-          if (cursor > 0) { cursor--; openReader(cursor) }
-          return
-        }
-        // Next article: right / l
-        if (key === '\x1b[C' || key === 'l') {
-          if (cursor < items.length - 1) { cursor++; openReader(cursor) }
-          return
-        }
-        return
-      }
-
-      if (key === 'q') { cleanup(); return }
+      if (key === 'q' || key === '\x03') { cleanup(); return }
 
       // Search box focused
       if (cursor === -1) {
@@ -509,7 +392,6 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
       if (key === '/') { cursor = -1; draw(); return } // jump to search
       if (key === '\r') { openUrl(items[cursor]!.url); return }
       if (key === 'g') { downloadPaper(items[cursor]!); return }
-      if (key === 'r') { openReader(cursor); return } // read article
     }
 
     process.stdin.on('data', onKey)
