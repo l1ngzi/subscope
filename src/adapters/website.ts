@@ -45,7 +45,9 @@ const parseFeed = (xml: string, source: Source): FeedItem[] => {
       const link =
         $(el).find('link').attr('href') ?? $(el).find('link').first().text().trim()
       const summary = $(el).find('description, summary').first().text().trim().slice(0, 200)
-      const date = $(el).find('pubDate, published, updated').first().text().trim()
+      const date = ($(el).find('pubDate, published, updated').first().text().trim()
+        || $(el).find('dc\\:date').first().text().trim()
+        || $(el).find('date').first().text().trim())
 
       if (!title || !link) return null
 
