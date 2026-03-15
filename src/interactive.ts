@@ -270,6 +270,7 @@ export const interactiveConfig = (): Promise<void> => {
 
   const getSrcList = () => {
     const path = current().path
+    if (!path) return cfg.sources // root = all sources
     return cfg.sources.filter(s => s.group === path || s.group.startsWith(path + '/'))
   }
 
@@ -407,9 +408,9 @@ export const interactiveConfig = (): Promise<void> => {
     const onKey = (key: string) => {
       // ── Add source: search mode ──
       if (inputMode === 'add-search') {
-        if (key === '\x1b' || key === '\x03') { exitInput(); return }
-        if (key === '\x1b[A' || key === 'k') { addCursor = Math.max(0, addCursor - 1); draw(); return }
-        if (key === '\x1b[B' || key === 'j') { addCursor = Math.min(addCatalog.length - 1, addCursor + 1); draw(); return }
+        if (key === '\x1b[A') { addCursor = Math.max(0, addCursor - 1); draw(); return }
+        if (key === '\x1b[B') { addCursor = Math.min(addCatalog.length - 1, addCursor + 1); draw(); return }
+        if (key === '\x03') { exitInput(); return }
         if (key === '\r') {
           const entry = addCatalog[addCursor]
           if (!entry) return
@@ -462,40 +463,14 @@ export const interactiveConfig = (): Promise<void> => {
 
       // ── Source edit mode (s) ──
       if (inputMode === 'sources') {
-        if (key === '\x1b[A' || key === 'k') {
-          srcCursor = Math.max(0, srcCursor - 1); draw(); return
-        }
-        if (key === '\x1b[B' || key === 'j') {
-          srcCursor = Math.min(srcList.length - 1, srcCursor + 1); draw(); return
-        }
-        if (key === ' ') {
-          const src = srcList[srcCursor]
-          if (src) { src.active = !src.active; dirty = true; draw() }
-          return
-        }
-        if (key === 'a') {
-          returnToSources = true
-          inputMode = 'add-search'; inputBuffer = ''; addCursor = 0; draw(); return
-        }
-        if (key === 'e') {
-          const src = srcList[srcCursor]
-          if (src) { inputMode = 'edit-source'; inputBuffer = src.name; editSourceId = src.id; draw() }
-          return
-        }
-        if (key === 'd') {
-          const src = srcList[srcCursor]
-          if (src) {
-            cfg.sources = cfg.sources.filter(s => s.id !== src.id)
-            dirty = true
-            srcList = getSrcList()
-            srcCursor = Math.min(srcCursor, Math.max(0, srcList.length - 1))
-            draw()
-          }
-          return
-        }
-        if (key === '\x1b' || key === '\r' || key === 'q' || key === '\x03') {
-          inputMode = ''; draw(); return
-        }
+        if (key === '\x1b[A' || key === 'k') { srcCursor = Math.max(0, srcCursor - 1); draw(); return }
+        if (key === '\x1b[B' || key === 'j') { srcCursor = Math.min(srcList.length - 1, srcCursor + 1); draw(); return }
+        if (key === ' ') { const src = srcList[srcCursor]; if (src) { src.active = !src.active; dirty = true; draw() }; return }
+        if (key === 'a') { returnToSources = true; inputMode = 'add-search'; inputBuffer = ''; addCursor = 0; draw(); return }
+        if (key === 'e') { const src = srcList[srcCursor]; if (src) { inputMode = 'edit-source'; inputBuffer = src.name; editSourceId = src.id; draw() }; return }
+        if (key === 'd') { const src = srcList[srcCursor]; if (src) { cfg.sources = cfg.sources.filter(s => s.id !== src.id); dirty = true; srcList = getSrcList(); srcCursor = Math.min(srcCursor, Math.max(0, srcList.length - 1)); draw() }; return }
+        // q/enter/ctrl-c to exit — NOT bare \x1b (conflicts with arrow key prefix)
+        if (key === '\r' || key === 'q' || key === '\x03') { inputMode = ''; draw(); return }
         return
       }
 
