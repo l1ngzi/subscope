@@ -1,8 +1,10 @@
 import { twitter } from './twitter.ts'
 import { youtube } from './youtube.ts'
+import { github } from './github.ts'
 import { website } from './website.ts'
 import { fetchAnthropic } from './sites/anthropic.ts'
 import { fetchClaude } from './sites/claude.ts'
+import { fetchDeepSeek } from './sites/deepseek.ts'
 import { fetchSupportCollection, fetchReleaseNotes } from './sites/support-claude.ts'
 import type { SourceAdapter, SourceType } from '../types.ts'
 
@@ -11,6 +13,7 @@ import type { SourceAdapter, SourceType } from '../types.ts'
 const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[] = [
   { host: 'support.claude.com', path: '/en/articles/12138966', fetch: fetchReleaseNotes },
   { host: 'support.claude.com', path: '/en/collections/', fetch: fetchSupportCollection },
+  { host: 'api-docs.deepseek.com', fetch: fetchDeepSeek },
   { host: 'claude.com', fetch: fetchClaude },
   { host: 'anthropic.com', fetch: fetchAnthropic },
 ]
@@ -28,6 +31,7 @@ const matchSite = (url: string): SourceAdapter['fetch'] | undefined => {
 const adapters: SourceAdapter[] = [
   twitter,
   youtube,
+  github,
   website,
 ]
 

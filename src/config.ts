@@ -67,15 +67,17 @@ export const removeSource = (config: Config, id: string): Config => ({
 // Auto-infer group from URL hostname
 export const inferGroup = (url: string): string => {
   const { hostname, pathname } = new URL(url)
-  // YouTube / X: infer from handle
-  if (hostname.includes('youtube.com') || hostname.includes('twitter.com') || hostname.includes('x.com')) {
+  // YouTube / X / GitHub: infer from handle/org
+  if (hostname.includes('youtube.com') || hostname.includes('twitter.com') || hostname.includes('x.com') || hostname === 'github.com') {
     const handle = pathname.match(/@?([\w-]+)/)?.[1]?.toLowerCase() ?? ''
     if (handle.includes('anthropic')) return 'anthropic'
     if (handle.includes('claude')) return 'claude'
+    if (handle.includes('deepseek')) return 'deepseek'
     return handle || hostname.split('.')[0]!
   }
   if (hostname.includes('anthropic.com')) return 'anthropic'
   if (hostname.includes('claude')) return 'claude'
+  if (hostname.includes('deepseek')) return 'deepseek'
   return hostname.replace('www.', '').split('.')[0]!
 }
 

@@ -38,7 +38,8 @@ const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000
 
 export const read = (opts: ReadOpts = {}): { items: FeedItem[]; olderCount: number } => {
   const config = load()
-  const mode = opts.mode ?? config.defaultMode
+  // -g bypasses mode filtering — show everything in that group
+  const mode = opts.group ? undefined : (opts.mode ?? config.defaultMode)
   const sources = activeSources(config, { group: opts.group, mode })
   const sourceIds = sources.map(s => s.id)
 
@@ -52,9 +53,12 @@ export const read = (opts: ReadOpts = {}): { items: FeedItem[]; olderCount: numb
     ? undefined
     : (opts.since ?? new Date(Date.now() - TWO_WEEKS).toISOString())
 
-  const items = store
-    .query({ limit: opts.limit, sourceType: opts.sourceType, since })
+  // Query without limit, filter by active sources, then apply limit
+  const allItems = store
+    .query({ sourceType: opts.sourceType, since })
     .filter(item => sourceIds.includes(item.sourceId))
+
+  const items = opts.limit ? allItems.slice(0, opts.limit) : allItems
 
   const olderCount = since
     ? store.query({ sourceType: opts.sourceType }).filter(item =>
