@@ -187,6 +187,9 @@ export const interactiveConfig = (): Promise<void> => {
     dirty: false,
   }
 
+  // Enter alternate screen buffer — clean canvas, original terminal restored on exit
+  process.stdout.write('\x1b[?1049h')
+
   let items = draw(state, true)
   state.cursor = firstSelectable(items)
   items = draw(state)
@@ -201,10 +204,10 @@ export const interactiveConfig = (): Promise<void> => {
         save(state.config)
       }
       process.stdout.write('\x1b[?25h') // show cursor
+      process.stdout.write('\x1b[?1049l') // leave alternate screen — restores original terminal
       process.stdin.setRawMode(false)
       process.stdin.pause()
       process.stdin.removeListener('data', onKey)
-      process.stdout.write('\x1b[2J\x1b[H')
       if (doSave && state.dirty) {
         console.log('\n  Config saved.\n')
       }
