@@ -1,4 +1,6 @@
-import { load, save, type Config } from './config.ts'
+import { load, save, addSource, type Config } from './config.ts'
+import { createHash } from 'crypto'
+import type { Source, SourceType } from './types.ts'
 
 // ── ANSI ──
 
@@ -143,8 +145,8 @@ const render = (path: string, rowList: Row[], cursor: number, dirty: boolean, in
 
   // Status bar
   const nav = path
-    ? '\u2191\u2193 move  space toggle  \u2192 open  \u2190 back  n new  e rename  d del  enter save'
-    : '\u2191\u2193 move  space toggle  \u2192 open  n new  e rename  d del  enter save  q quit'
+    ? '\u2191\u2193 move  space toggle  \u2192 open  \u2190 back  a add  n new  e rename  d del  q save'
+    : '\u2191\u2193 move  space toggle  \u2192 open  a add  n new  e rename  d del  q save'
   const mark = dirty ? `${CYAN}*${RESET} ` : '  '
   const pad = Math.max(0, w - nav.length - 4)
   out.push(`${BG_BAR}${WHITE} ${mark}${DIM}${nav}${' '.repeat(pad)}${RESET}`)
@@ -203,6 +205,51 @@ const toggle = (cfg: Config, row: Row) => {
   }
 }
 
+// ── Source catalog ──
+
+interface CatalogEntry {
+  label: string
+  type: SourceType
+  url?: string           // fixed URL (pre-defined source)
+  template?: string      // URL template with {handle} placeholder
+  placeholder?: string   // input hint
+}
+
+const CATALOG: CatalogEntry[] = [
+  // Pre-defined sources
+  { label: 'Anthropic Blog', type: 'website', url: 'https://www.anthropic.com/blog' },
+  { label: 'Anthropic Research', type: 'website', url: 'https://www.anthropic.com/research' },
+  { label: 'Anthropic Engineering', type: 'website', url: 'https://www.anthropic.com/engineering' },
+  { label: 'Claude Blog', type: 'website', url: 'https://www.claude.com/blog' },
+  { label: 'Claude Release Notes', type: 'website', url: 'https://support.claude.com/en/articles/12138966-release-notes' },
+  { label: 'Claude Usage & Limits', type: 'website', url: 'https://support.claude.com/en/collections/18031876-usage-and-limits' },
+  { label: 'OpenAI News', type: 'website', url: 'https://openai.com/news/rss.xml' },
+  { label: 'DeepMind Blog', type: 'website', url: 'https://deepmind.google/blog/rss.xml' },
+  { label: 'DeepSeek Changelog', type: 'website', url: 'https://api-docs.deepseek.com/updates' },
+  { label: 'xAI News', type: 'website', url: 'https://x.ai/news' },
+  // Templates
+  { label: 'YouTube Channel', type: 'youtube', template: 'https://www.youtube.com/@{handle}', placeholder: '@handle' },
+  { label: 'X / Twitter Account', type: 'twitter', template: 'https://x.com/{handle}', placeholder: '@handle' },
+  { label: 'GitHub Org / Repo', type: 'website', template: 'https://github.com/{handle}', placeholder: 'org or org/repo' },
+  { label: 'Custom RSS / Website', type: 'website', template: '{handle}', placeholder: 'https://...' },
+]
+
+const makeSource = (entry: CatalogEntry, url: string, group: string): Source => {
+  const parsed = new URL(url)
+  const host = parsed.hostname.replace('www.', '')
+  const path = parsed.pathname.replace(/\/+$/, '')
+  const name = path && path !== '/' ? `${host}${path}` : host
+  return {
+    id: createHash('sha256').update(url).digest('hex').slice(0, 8),
+    url,
+    type: entry.type,
+    name,
+    group,
+    active: true,
+    addedAt: new Date().toISOString(),
+  }
+}
+
 // ── Main loop ──
 
 export const interactiveConfig = (): Promise<void> => {
@@ -212,8 +259,11 @@ export const interactiveConfig = (): Promise<void> => {
   const stack: { path: string; cursor: number }[] = [{ path: '', cursor: 0 }]
 
   let dirty = false
-  let inputMode = '' // empty = normal, non-empty = typing folder name
+  let inputMode = '' // '', 'new', 'rename', 'add-search', 'add-handle'
   let inputBuffer = ''
+  let addCatalog: CatalogEntry[] = []  // filtered catalog
+  let addCursor = 0                    // selected catalog item
+  let addSelected: CatalogEntry | null = null // selected entry needing handle input
 
   const current = () => stack[stack.length - 1]!
 
@@ -223,11 +273,61 @@ export const interactiveConfig = (): Promise<void> => {
   process.stdout.write(ALT_ON)
 
   const draw = () => {
+    if (inputMode === 'add-search' || inputMode === 'add-handle') {
+      drawAddMode()
+      return
+    }
     rowList = buildRows(cfg, current().path)
     const prompt = inputMode === 'rename' ? `Rename: ${inputBuffer}\u2588`
       : inputMode === 'new' ? `New folder: ${inputBuffer}\u2588`
       : ''
     render(current().path, rowList, current().cursor, dirty, prompt)
+  }
+
+  const drawAddMode = () => {
+    const w = cols()
+    const h = rows()
+    const out: string[] = []
+
+    if (inputMode === 'add-handle') {
+      out.push(`  ${BOLD}Add: ${addSelected!.label}${RESET}`)
+      out.push('')
+      out.push(`  ${DIM}${addSelected!.placeholder}:${RESET} ${YELLOW}${inputBuffer}\u2588${RESET}`)
+    } else {
+      out.push(`  ${BOLD}Add source${RESET}  ${DIM}(type to search)${RESET}`)
+      out.push(`  ${DIM}Search:${RESET} ${YELLOW}${inputBuffer}\u2588${RESET}`)
+      out.push('')
+
+      // Filter catalog: exclude already-added fixed sources
+      const existingUrls = new Set(cfg.sources.map(s => s.url))
+      addCatalog = CATALOG.filter(e => {
+        if (e.url && existingUrls.has(e.url)) return false
+        if (!inputBuffer) return true
+        return e.label.toLowerCase().includes(inputBuffer.toLowerCase())
+      })
+
+      if (addCursor >= addCatalog.length) addCursor = Math.max(0, addCatalog.length - 1)
+
+      for (let i = 0; i < addCatalog.length; i++) {
+        const e = addCatalog[i]!
+        const sel = i === addCursor
+        const ptr = sel ? `${CYAN}\u203a${RESET}` : ' '
+        const icon = e.template ? `${DIM}\u2026${RESET}` : `${CYAN}+${RESET}`
+        const label = sel ? `${BOLD}${e.label}${RESET}` : e.label
+        const hint = e.template ? `  ${DIM}${e.placeholder}${RESET}` : `  ${DIM}${e.url?.replace('https://', '')}${RESET}`
+        out.push(` ${ptr} ${icon} ${label}${hint}`)
+      }
+
+      if (addCatalog.length === 0) {
+        out.push(`  ${DIM}No matching sources${RESET}`)
+      }
+    }
+
+    while (out.length < h - 2) out.push('')
+    const nav = '\u2191\u2193 select  enter confirm  esc cancel'
+    const pad = Math.max(0, w - nav.length - 4)
+    out.push(`${BG_BAR}${WHITE}   ${DIM}${nav}${' '.repeat(pad)}${RESET}`)
+    process.stdout.write(HOME + HIDE_CURSOR + out.map(l => l + CLR_LINE).join('\n') + CLR_BELOW)
   }
 
   draw()
@@ -247,8 +347,71 @@ export const interactiveConfig = (): Promise<void> => {
       resolve()
     }
 
+    const exitInput = () => {
+      inputMode = ''
+      inputBuffer = ''
+      addSelected = null
+      addCursor = 0
+      draw()
+    }
+
     const onKey = (key: string) => {
-      // Input mode: typing folder name
+      // ── Add source: search mode ──
+      if (inputMode === 'add-search') {
+        if (key === '\x1b' || key === '\x03') { exitInput(); return }
+        if (key === '\x1b[A' || key === 'k') { addCursor = Math.max(0, addCursor - 1); draw(); return }
+        if (key === '\x1b[B' || key === 'j') { addCursor = Math.min(addCatalog.length - 1, addCursor + 1); draw(); return }
+        if (key === '\r') {
+          const entry = addCatalog[addCursor]
+          if (!entry) return
+          if (entry.url) {
+            // Fixed source — add directly
+            const group = current().path || 'ungrouped'
+            const src = makeSource(entry, entry.url, group)
+            if (!cfg.sources.some(s => s.url === src.url)) {
+              cfg.sources.push(src)
+              if (!cfg.activeGroups.includes(group)) cfg.activeGroups.push(group)
+              dirty = true
+            }
+            exitInput()
+          } else {
+            // Template — need handle input
+            addSelected = entry
+            inputMode = 'add-handle'
+            inputBuffer = ''
+            draw()
+          }
+          return
+        }
+        if (key === '\x7f' || key === '\b') { inputBuffer = inputBuffer.slice(0, -1); addCursor = 0; draw(); return }
+        if (key.length === 1 && key.charCodeAt(0) >= 32) { inputBuffer += key; addCursor = 0; draw(); return }
+        return
+      }
+
+      // ── Add source: handle input mode ──
+      if (inputMode === 'add-handle') {
+        if (key === '\x1b' || key === '\x03') { exitInput(); return }
+        if (key === '\r') {
+          if (inputBuffer.trim() && addSelected) {
+            const handle = inputBuffer.trim().replace(/^@/, '')
+            const url = addSelected.template!.replace('{handle}', handle)
+            const group = current().path || 'ungrouped'
+            const src = makeSource(addSelected, url, group)
+            if (!cfg.sources.some(s => s.url === src.url)) {
+              cfg.sources.push(src)
+              if (!cfg.activeGroups.includes(group)) cfg.activeGroups.push(group)
+              dirty = true
+            }
+          }
+          exitInput()
+          return
+        }
+        if (key === '\x7f' || key === '\b') { inputBuffer = inputBuffer.slice(0, -1); draw(); return }
+        if (key.length === 1 && key.charCodeAt(0) >= 32) { inputBuffer += key; draw(); return }
+        return
+      }
+
+      // ── Folder/rename input mode ──
       if (inputMode) {
         if (key === '\r') {
           if (inputBuffer.trim()) {
@@ -256,7 +419,6 @@ export const interactiveConfig = (): Promise<void> => {
             const newPath = current().path ? `${current().path}/${newName}` : newName
 
             if (inputMode === 'rename') {
-              // Rename: update all paths that start with old path
               const row = rowList[current().cursor]
               const oldPath = row?.key!
               const rename = (p: string) =>
@@ -265,26 +427,17 @@ export const interactiveConfig = (): Promise<void> => {
               cfg.activeGroups = cfg.activeGroups.map(rename)
               cfg.sources.forEach(s => { s.group = rename(s.group) })
             } else {
-              // New folder
               if (!cfg.folders.includes(newPath)) cfg.folders.push(newPath)
               if (!cfg.activeGroups.includes(newPath)) cfg.activeGroups.push(newPath)
             }
             dirty = true
           }
-          inputMode = ''
-          inputBuffer = ''
-          draw()
-        } else if (key === '\x1b' || key === '\x03') {
-          inputMode = ''
-          inputBuffer = ''
-          draw()
-        } else if (key === '\x7f' || key === '\b') {
-          inputBuffer = inputBuffer.slice(0, -1)
-          draw()
-        } else if (key.length === 1 && key.charCodeAt(0) >= 32) {
-          inputBuffer += key
-          draw()
+          exitInput()
+          return
         }
+        if (key === '\x1b' || key === '\x03') { exitInput(); return }
+        if (key === '\x7f' || key === '\b') { inputBuffer = inputBuffer.slice(0, -1); draw(); return }
+        if (key.length === 1 && key.charCodeAt(0) >= 32) { inputBuffer += key; draw(); return }
         return
       }
 
@@ -315,6 +468,11 @@ export const interactiveConfig = (): Promise<void> => {
           stack.pop()
           draw()
         }
+      } else if (key === 'a') {
+        inputMode = 'add-search'
+        inputBuffer = ''
+        addCursor = 0
+        draw()
       } else if (key === 'n') {
         inputMode = 'new'
         inputBuffer = ''
