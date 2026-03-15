@@ -1,264 +1,230 @@
-import { load, save } from './config.ts'
-import type { Config } from './config.ts'
+import { load, save, type Config } from './config.ts'
 
-const RESET = '\x1b[0m'
-const BOLD = '\x1b[1m'
-const DIM = '\x1b[2m'
-const CYAN = '\x1b[36m'
-const GRAY = '\x1b[90m'
-const WHITE = '\x1b[37m'
-const BG_GRAY = '\x1b[48;5;236m'
-const INVERSE = '\x1b[7m'
+// ── ANSI ──
 
-type Item = {
-  kind: 'header'
-  label: string
-} | {
-  kind: 'mode'
-  name: string
-  types: string[]
-} | {
-  kind: 'group'
-  name: string
-  total: number
-  active: number
-} | {
-  kind: 'source'
-  id: string
-  name: string
-  type: string
-  url: string
+const esc = (code: string) => `\x1b[${code}`
+const RESET = esc('0m')
+const BOLD = esc('1m')
+const DIM = esc('2m')
+const CYAN = esc('36m')
+const GRAY = esc('90m')
+const WHITE = esc('37m')
+const BG_BAR = esc('48;5;236m')
+const HIDE_CURSOR = esc('?25l')
+const SHOW_CURSOR = esc('?25h')
+const ALT_ON = esc('?1049h')
+const ALT_OFF = esc('?1049l')
+const HOME = esc('H')
+const CLR_LINE = esc('K')
+const CLR_BELOW = esc('J')
+
+const cols = () => process.stdout.columns || 80
+const rows = () => process.stdout.rows || 24
+
+// ── Data ──
+
+interface Row {
+  kind: 'gap' | 'label' | 'mode' | 'group' | 'source'
+  key?: string
+  text: string
+  active?: boolean
 }
 
-interface State {
-  screen: 'main' | 'group'
-  groupName?: string
-  cursor: number
-  config: Config
-  dirty: boolean
+const mainRows = (cfg: Config): Row[] => {
+  const r: Row[] = []
+  r.push({ kind: 'label', text: 'Default Mode' })
+  for (const [name, m] of Object.entries(cfg.modes)) {
+    r.push({
+      kind: 'mode',
+      key: name,
+      text: `${name}  ${DIM}${m.types.join(', ')}${RESET}`,
+      active: cfg.defaultMode === name,
+    })
+  }
+  r.push({ kind: 'gap', text: '' })
+  r.push({ kind: 'label', text: 'Groups' })
+  for (const g of [...new Set(cfg.sources.map(s => s.group))]) {
+    const all = cfg.sources.filter(s => s.group === g)
+    const on = all.filter(s => s.active).length
+    r.push({
+      kind: 'group',
+      key: g,
+      text: `${g}  ${DIM}${on}/${all.length} sources${RESET}`,
+      active: cfg.activeGroups.includes(g),
+    })
+  }
+  return r
 }
 
-const buildMainItems = (config: Config): Item[] => {
-  const items: Item[] = []
+const groupRows = (cfg: Config, group: string): Row[] => {
+  const r: Row[] = []
+  r.push({ kind: 'label', text: group })
+  for (const s of cfg.sources.filter(s => s.group === group)) {
+    r.push({
+      kind: 'source',
+      key: s.id,
+      text: `${s.name}  ${DIM}${s.type}${RESET}`,
+      active: s.active,
+    })
+  }
+  return r
+}
 
-  items.push({ kind: 'header', label: 'Default Mode' })
-  for (const [name, m] of Object.entries(config.modes)) {
-    items.push({ kind: 'mode', name, types: m.types })
+const selectable = (row: Row) => row.kind !== 'gap' && row.kind !== 'label'
+
+// ── Render ──
+
+const render = (title: string, rowList: Row[], cursor: number, dirty: boolean, isGroup: boolean) => {
+  const w = cols()
+  const h = rows()
+  const out: string[] = []
+
+  out.push(`  ${BOLD}${title}${RESET}`)
+  out.push('')
+
+  for (let i = 0; i < rowList.length; i++) {
+    const row = rowList[i]!
+    const sel = i === cursor
+
+    if (row.kind === 'gap') {
+      out.push('')
+      continue
+    }
+    if (row.kind === 'label') {
+      out.push(`  ${DIM}${row.text}${RESET}`)
+      continue
+    }
+
+    const icon = row.active ? `${CYAN}\u25cf${RESET}` : `${GRAY}\u25cb${RESET}`
+    const ptr = sel ? `${CYAN}\u203a${RESET}` : ' '
+    const arrow = sel && row.kind === 'group' ? `  ${DIM}\u2192${RESET}` : ''
+    const label = sel ? `${BOLD}${row.text}${RESET}` : row.text
+    const tag = row.kind === 'mode' && row.active ? `  ${DIM}(default)${RESET}` : ''
+
+    out.push(` ${ptr} ${icon} ${label}${tag}${arrow}`)
   }
 
-  items.push({ kind: 'header', label: 'Groups' })
-  const groups = [...new Set(config.sources.map(s => s.group))]
-  for (const g of groups) {
-    const sources = config.sources.filter(s => s.group === g)
-    const active = sources.filter(s => s.active).length
-    items.push({ kind: 'group', name: g, total: sources.length, active })
-  }
+  // Fill to push bar to bottom
+  while (out.length < h - 2) out.push('')
 
-  return items
+  // Status bar
+  const nav = isGroup
+    ? '\u2191\u2193 navigate  space toggle  \u2190 back  enter save  q quit'
+    : '\u2191\u2193 navigate  space toggle  \u2192 drill in  enter save  q quit'
+  const mark = dirty ? `${CYAN}*${RESET} ` : '  '
+  const pad = Math.max(0, w - nav.length - 4)
+  out.push(`${BG_BAR}${WHITE} ${mark}${DIM}${nav}${' '.repeat(pad)}${RESET}`)
+
+  // Single write: home + each line cleared to EOL + clear everything below
+  process.stdout.write(
+    HOME + HIDE_CURSOR + out.map(l => l + CLR_LINE).join('\n') + CLR_BELOW
+  )
 }
 
-const buildGroupItems = (config: Config, group: string): Item[] => {
-  const items: Item[] = []
-  items.push({ kind: 'header', label: group })
-  for (const s of config.sources.filter(s => s.group === group)) {
-    items.push({ kind: 'source', id: s.id, name: s.name, type: s.type, url: s.url })
-  }
-  return items
-}
+// ── Navigation helpers ──
 
-const isSelectable = (item: Item) => item.kind !== 'header'
-
-const nextSelectable = (items: Item[], from: number, dir: 1 | -1): number => {
+const findNext = (rowList: Row[], from: number, dir: 1 | -1): number => {
   let i = from + dir
-  while (i >= 0 && i < items.length) {
-    if (isSelectable(items[i]!)) return i
+  while (i >= 0 && i < rowList.length) {
+    if (selectable(rowList[i]!)) return i
     i += dir
   }
   return from
 }
 
-const firstSelectable = (items: Item[]): number => {
-  for (let i = 0; i < items.length; i++) {
-    if (isSelectable(items[i]!)) return i
+const findFirst = (rowList: Row[]): number => {
+  for (let i = 0; i < rowList.length; i++) {
+    if (selectable(rowList[i]!)) return i
   }
   return 0
 }
 
-const isActive = (state: State, item: Item): boolean => {
-  if (item.kind === 'mode') return state.config.defaultMode === item.name
-  if (item.kind === 'group') return state.config.activeGroups.includes(item.name)
-  if (item.kind === 'source') {
-    const source = state.config.sources.find(s => s.id === item.id)
-    return source?.active ?? false
-  }
-  return false
-}
+// ── Toggle ──
 
-const toggle = (state: State, item: Item): void => {
-  state.dirty = true
-  if (item.kind === 'mode') {
-    state.config.defaultMode = item.name
-  } else if (item.kind === 'group') {
-    const idx = state.config.activeGroups.indexOf(item.name)
-    if (idx >= 0) state.config.activeGroups.splice(idx, 1)
-    else state.config.activeGroups.push(item.name)
-  } else if (item.kind === 'source') {
-    const source = state.config.sources.find(s => s.id === item.id)
-    if (source) source.active = !source.active
+const toggle = (cfg: Config, row: Row) => {
+  if (row.kind === 'mode') {
+    cfg.defaultMode = row.key!
+  } else if (row.kind === 'group') {
+    const i = cfg.activeGroups.indexOf(row.key!)
+    if (i >= 0) cfg.activeGroups.splice(i, 1)
+    else cfg.activeGroups.push(row.key!)
+  } else if (row.kind === 'source') {
+    const src = cfg.sources.find(s => s.id === row.key)
+    if (src) src.active = !src.active
   }
 }
 
-const cols = () => process.stdout.columns || 80
-const rows = () => process.stdout.rows || 24
-
-const renderLine = (item: Item, selected: boolean, active: boolean): string => {
-  const cursor = selected ? `${CYAN}\u203a${RESET}` : ' '
-
-  if (item.kind === 'header') {
-    return `\n  ${DIM}${item.label}${RESET}`
-  }
-
-  const icon = active ? `${CYAN}\u25cf${RESET}` : `${GRAY}\u25cb${RESET}`
-
-  if (item.kind === 'mode') {
-    const label = selected ? `${BOLD}${item.name}${RESET}` : item.name
-    const def = active ? ` ${DIM}(default)${RESET}` : ''
-    return ` ${cursor} ${icon} ${label}  ${DIM}${item.types.join(', ')}${def}${RESET}`
-  }
-
-  if (item.kind === 'group') {
-    const label = selected ? `${BOLD}${item.name}${RESET}` : item.name
-    const arrow = selected ? ` ${DIM}\u2192${RESET}` : ''
-    return ` ${cursor} ${icon} ${label}  ${DIM}${item.active}/${item.total} sources${arrow}${RESET}`
-  }
-
-  if (item.kind === 'source') {
-    const label = selected ? `${BOLD}${item.name}${RESET}` : item.name
-    return ` ${cursor} ${icon} ${label}  ${DIM}${item.type}${RESET}`
-  }
-
-  return ''
-}
-
-const draw = (state: State) => {
-  const items = state.screen === 'main'
-    ? buildMainItems(state.config)
-    : buildGroupItems(state.config, state.groupName!)
-
-  // In alternate screen buffer, full clear is safe and flicker-free
-  const lines: string[] = []
-
-  const title = state.screen === 'main' ? 'subscope config' : state.groupName!
-  lines.push('')
-  lines.push(`  ${BOLD}${title}${RESET}`)
-
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]!
-    const selected = i === state.cursor
-    const active = isActive(state, item)
-    lines.push(renderLine(item, selected, active))
-  }
-
-  // Pad to push status bar to bottom
-  const used = lines.length + 2
-  const pad = Math.max(0, rows() - used)
-  for (let i = 0; i < pad; i++) lines.push('')
-
-  // Status bar
-  const hints = state.screen === 'main'
-    ? '\u2191\u2193 navigate  space toggle  \u2192 drill in  enter save  q quit'
-    : '\u2191\u2193 navigate  space toggle  \u2190 back  enter save  q quit'
-  const dirty = state.dirty ? ` ${CYAN}*${RESET}` : ''
-  const bar = ` ${dirty} ${DIM}${hints}${RESET}`
-  lines.push(`${BG_GRAY}${WHITE}${bar}${''.padEnd(Math.max(0, cols() - hints.length - 4))}${RESET}`)
-
-  // Write everything in one shot — minimizes flicker
-  process.stdout.write('\x1b[H\x1b[?25l' + lines.join('\x1b[K\n') + '\x1b[K')
-
-  return items
-}
+// ── Main loop ──
 
 export const interactiveConfig = (): Promise<void> => {
-  const state: State = {
-    screen: 'main',
-    cursor: 0,
-    config: load(),
-    dirty: false,
+  const cfg = load()
+
+  let screen: 'main' | 'group' = 'main'
+  let groupName = ''
+  let dirty = false
+  let mainCursor = 0
+
+  let rowList = mainRows(cfg)
+  let cursor = findFirst(rowList)
+
+  process.stdout.write(ALT_ON)
+
+  const draw = () => {
+    const title = screen === 'main' ? 'subscope config' : groupName
+    render(title, rowList, cursor, dirty, screen === 'group')
   }
 
-  // Enter alternate screen buffer — clean canvas, original terminal restored on exit
-  process.stdout.write('\x1b[?1049h')
-
-  let items = draw(state)
-  state.cursor = firstSelectable(items)
-  items = draw(state)
+  draw()
 
   return new Promise<void>(resolve => {
     process.stdin.setRawMode(true)
     process.stdin.resume()
     process.stdin.setEncoding('utf-8')
 
-    const cleanup = (doSave: boolean) => {
-      if (doSave && state.dirty) {
-        save(state.config)
-      }
-      process.stdout.write('\x1b[?25h') // show cursor
-      process.stdout.write('\x1b[?1049l') // leave alternate screen — restores original terminal
+    const quit = () => {
+      if (dirty) save(cfg)
+      process.stdout.write(SHOW_CURSOR + ALT_OFF)
       process.stdin.setRawMode(false)
       process.stdin.pause()
       process.stdin.removeListener('data', onKey)
-      if (doSave && state.dirty) {
-        console.log('\n  Config saved.\n')
-      }
+      if (dirty) console.log('\n  Config saved.\n')
       resolve()
     }
 
     const onKey = (key: string) => {
-      // Up
       if (key === '\x1b[A' || key === 'k') {
-        state.cursor = nextSelectable(items, state.cursor, -1)
-        items = draw(state)
-      }
-      // Down
-      else if (key === '\x1b[B' || key === 'j') {
-        state.cursor = nextSelectable(items, state.cursor, 1)
-        items = draw(state)
-      }
-      // Space — toggle
-      else if (key === ' ') {
-        const item = items[state.cursor]
-        if (item && isSelectable(item)) {
-          toggle(state, item)
-          items = draw(state)
+        cursor = findNext(rowList, cursor, -1)
+        draw()
+      } else if (key === '\x1b[B' || key === 'j') {
+        cursor = findNext(rowList, cursor, 1)
+        draw()
+      } else if (key === ' ') {
+        const row = rowList[cursor]
+        if (row && selectable(row)) {
+          toggle(cfg, row)
+          dirty = true
+          rowList = screen === 'main' ? mainRows(cfg) : groupRows(cfg, groupName)
+          draw()
         }
-      }
-      // Right / l — drill into group
-      else if (key === '\x1b[C' || key === 'l') {
-        const item = items[state.cursor]
-        if (item?.kind === 'group') {
-          state.screen = 'group'
-          state.groupName = item.name
-          items = draw(state)
-          state.cursor = firstSelectable(items)
-          items = draw(state)
+      } else if (key === '\x1b[C' || key === 'l') {
+        const row = rowList[cursor]
+        if (row?.kind === 'group') {
+          mainCursor = cursor
+          screen = 'group'
+          groupName = row.key!
+          rowList = groupRows(cfg, groupName)
+          cursor = findFirst(rowList)
+          draw()
         }
-      }
-      // Left / h — back to main
-      else if (key === '\x1b[D' || key === 'h') {
-        if (state.screen === 'group') {
-          state.screen = 'main'
-          items = draw(state)
-          state.cursor = firstSelectable(items)
-          items = draw(state)
+      } else if (key === '\x1b[D' || key === 'h') {
+        if (screen === 'group') {
+          screen = 'main'
+          rowList = mainRows(cfg)
+          cursor = mainCursor
+          draw()
         }
-      }
-      // Enter — save and exit
-      else if (key === '\r') {
-        cleanup(true)
-      }
-      // q / ESC / Ctrl+C — exit (save if dirty)
-      else if (key === 'q' || key === '\x1b' || key === '\x03') {
-        cleanup(true)
+      } else if (key === '\r' || key === 'q' || key === '\x1b' || key === '\x03') {
+        quit()
       }
     }
 
