@@ -10,8 +10,19 @@ export const website: SourceAdapter = {
   test: () => true,
 
   async fetch(source: Source): Promise<FeedItem[]> {
-    const html = await globalThis.fetch(source.url).then(r => r.text())
-    const $ = cheerio.load(html)
+    const res = await globalThis.fetch(source.url)
+    const text = await res.text()
+    const contentType = res.headers.get('content-type') ?? ''
+
+    // If the URL itself is an RSS/Atom feed, parse directly
+    const isXml = contentType.includes('xml') || contentType.includes('rss') || contentType.includes('atom')
+    const looksLikeFeed = text.trimStart().startsWith('<?xml') || text.trimStart().startsWith('<rss') || text.trimStart().startsWith('<feed')
+
+    if (isXml || looksLikeFeed) {
+      return parseFeed(text, source)
+    }
+
+    const $ = cheerio.load(text)
 
     const feedUrl =
       $('link[type="application/rss+xml"]').attr('href') ??
@@ -26,10 +37,8 @@ export const website: SourceAdapter = {
   },
 }
 
-const fetchFeed = async (feedUrl: string, source: Source): Promise<FeedItem[]> => {
-  const xml = await globalThis.fetch(feedUrl).then(r => r.text())
+const parseFeed = (xml: string, source: Source): FeedItem[] => {
   const $ = cheerio.load(xml, { xml: true })
-
   return $('item, entry')
     .map((_, el) => {
       const title = $(el).find('title').first().text().trim()
@@ -53,6 +62,11 @@ const fetchFeed = async (feedUrl: string, source: Source): Promise<FeedItem[]> =
     })
     .get()
     .filter(Boolean) as FeedItem[]
+}
+
+const fetchFeed = async (feedUrl: string, source: Source): Promise<FeedItem[]> => {
+  const xml = await globalThis.fetch(feedUrl).then(r => r.text())
+  return parseFeed(xml, source)
 }
 
 const scrapeHTML = ($: cheerio.CheerioAPI, source: Source): FeedItem[] => {
