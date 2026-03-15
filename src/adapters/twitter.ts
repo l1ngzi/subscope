@@ -9,11 +9,38 @@ const hash = (...parts: string[]) =>
   createHash('sha256').update(parts.join(':')).digest('hex').slice(0, 12)
 
 const AUTH_FILE = join(homedir(), '.subscope', 'auth.yml')
-const SCRAPER_SCRIPT = join(import.meta.dir, 'x-scraper.cjs')
-const SYNDICATION_URL = 'https://syndication.twitter.com/srv/timeline-profile/screen-name/'
 
-// One browser scrape for all X sources
-let scrapePromise: Promise<Map<string, RawTweet[]>> | null = null
+// X web app's public bearer token (baked into their JS, never changes)
+const BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA'
+
+const FEATURES = JSON.stringify({
+  rweb_tipjar_consumption_enabled: true,
+  responsive_web_graphql_exclude_directive_enabled: true,
+  verified_phone_label_enabled: false,
+  creator_subscriptions_tweet_preview_api_enabled: true,
+  responsive_web_graphql_timeline_navigation_enabled: true,
+  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+  communities_web_enable_tweet_community_results_fetch: true,
+  c9s_tweet_anatomy_moderator_badge_enabled: true,
+  articles_preview_enabled: true,
+  responsive_web_edit_tweet_api_enabled: true,
+  graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+  view_counts_everywhere_api_enabled: true,
+  longform_notetweets_consumption_enabled: true,
+  responsive_web_twitter_article_tweet_consumption_enabled: true,
+  tweet_awards_web_tipping_enabled: false,
+  creator_subscriptions_quote_tweet_preview_enabled: false,
+  freedom_of_speech_not_reach_fetch_enabled: true,
+  standardized_nudges_misinfo: true,
+  tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
+  rweb_video_timestamps_enabled: true,
+  longform_notetweets_rich_text_read_enabled: true,
+  longform_notetweets_inline_media_enabled: true,
+  responsive_web_enhance_cards_enabled: false,
+})
+
+// Cache auth session across sources
+let sessionCache: { ct0: string; authToken: string } | null = null
 
 export const twitter: SourceAdapter = {
   type: 'twitter',
@@ -26,104 +53,103 @@ export const twitter: SourceAdapter = {
     const username = extractUsername(source.url)
     if (!username) return []
 
-    // Strategy 1: Playwright (if auth token available)
-    const authToken = loadAuthToken()
-    if (authToken) {
-      if (!scrapePromise) {
-        scrapePromise = scrapeAll(authToken)
-      }
-      const cache = await scrapePromise
-      const tweets = cache.get(username.toLowerCase()) ?? []
-      if (tweets.length > 0) {
-        return mergeThreads(tweets, username, source)
-      }
-    }
+    const session = await getSession()
+    const userId = await resolveUserId(session, username)
+    if (!userId) throw new Error(`X: user "${username}" not found`)
 
-    // Strategy 2: Syndication fallback
-    const items = await fetchSyndication(username, source)
-    if (items.length > 0) return items
-
-    // Both failed
-    if (!authToken) {
-      throw new Error('X auth required. Run: subscope auth x <token>')
-    }
-    return []
+    const tweets = await fetchUserTweets(session, userId)
+    return mergeThreads(tweets, username, source)
   },
 }
 
-export const resetTwitterCache = () => { scrapePromise = null }
+// ── Session management ──
 
-// ── Playwright batch scrape ──
+const getSession = async () => {
+  if (sessionCache) return sessionCache
 
-const scrapeAll = async (authToken: string): Promise<Map<string, RawTweet[]>> => {
-  try {
-    const configPath = join(homedir(), '.subscope', 'config.yml')
-    const config = parse(readFileSync(configPath, 'utf-8')) as any
-    const usernames = (config.sources ?? [])
-      .filter((s: any) => s.url?.includes('x.com') || s.url?.includes('twitter.com'))
-      .map((s: any) => extractUsername(s.url))
-      .filter(Boolean) as string[]
+  const authToken = loadAuthToken()
+  if (!authToken) throw new Error('X auth required. Run: subscope auth x <token>')
 
-    if (usernames.length === 0) return new Map()
+  const res = await fetch('https://x.com', {
+    headers: { Cookie: `auth_token=${authToken}` },
+    redirect: 'manual',
+  })
 
-    const proc = Bun.spawn(['node', SCRAPER_SCRIPT, authToken, ...usernames], {
-      stdout: 'pipe',
-      stderr: 'inherit',
-      timeout: 60_000 + usernames.length * 15_000,
-    })
+  const ct0 = res.headers.getSetCookie?.()
+    .find(c => c.startsWith('ct0='))?.split('=')[1]?.split(';')[0]
 
-    const stdout = await new Response(proc.stdout).text()
-    const exitCode = await proc.exited
+  if (!ct0) throw new Error('X: failed to get CSRF token — auth_token may be expired')
 
-    if (exitCode !== 0 || !stdout.trim()) return new Map()
-
-    const data: Record<string, RawTweet[]> = JSON.parse(stdout)
-    const result = new Map<string, RawTweet[]>()
-    for (const [user, tweets] of Object.entries(data)) {
-      result.set(user.toLowerCase(), tweets)
-    }
-    return result
-  } catch {
-    return new Map()
-  }
+  sessionCache = { ct0, authToken }
+  return sessionCache
 }
 
-// ── Syndication fallback ──
+const apiHeaders = (session: { ct0: string; authToken: string }) => ({
+  Authorization: `Bearer ${BEARER}`,
+  'X-Csrf-Token': session.ct0,
+  Cookie: `auth_token=${session.authToken}; ct0=${session.ct0}`,
+})
 
-const fetchSyndication = async (username: string, source: Source): Promise<FeedItem[]> => {
-  try {
-    const res = await fetch(`${SYNDICATION_URL}${username}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-    })
-    if (!res.ok) return []
+// ── GraphQL calls ──
 
-    const html = await res.text()
-    if (html.includes('Rate limit exceeded')) return []
+const resolveUserId = async (session: { ct0: string; authToken: string }, username: string): Promise<string | null> => {
+  const variables = JSON.stringify({ screen_name: username })
+  const userFeatures = JSON.stringify({
+    hidden_profile_subscriptions_enabled: true,
+    responsive_web_graphql_exclude_directive_enabled: true,
+    verified_phone_label_enabled: false,
+    responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+    responsive_web_graphql_timeline_navigation_enabled: true,
+  })
 
-    const match = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s)
-    if (!match) return []
+  const url = `https://x.com/i/api/graphql/xc8f1g7BYqr6VTzTbvNlGw/UserByScreenName?variables=${encodeURIComponent(variables)}&features=${encodeURIComponent(userFeatures)}`
+  const res = await fetch(url, { headers: apiHeaders(session) })
+  if (!res.ok) return null
 
-    const data = JSON.parse(match[1]!)
-    const entries: any[] = data?.props?.pageProps?.timeline?.entries ?? []
+  const data = await res.json() as any
+  return data?.data?.user?.result?.rest_id ?? null
+}
 
-    const tweets: RawTweet[] = []
-    for (const entry of entries) {
-      const t = entry?.content?.tweet
-      if (!t?.text || !t?.id_str) continue
-      if (t.retweeted_status_result) continue
+const fetchUserTweets = async (session: { ct0: string; authToken: string }, userId: string): Promise<RawTweet[]> => {
+  const variables = JSON.stringify({
+    userId,
+    count: 40,
+    includePromotedContent: false,
+    withQuickPromoteEligibilityTweetFields: false,
+    withVoice: false,
+    withV2Timeline: true,
+  })
+
+  const url = `https://x.com/i/api/graphql/E3opETHurmVJflFsUBVuUQ/UserTweets?variables=${encodeURIComponent(variables)}&features=${encodeURIComponent(FEATURES)}`
+  const res = await fetch(url, { headers: apiHeaders(session) })
+  if (!res.ok) throw new Error(`X API: ${res.status}`)
+
+  const data = await res.json()
+
+  // Recursively extract all tweet objects from the response
+  const tweets: RawTweet[] = []
+  const seen = new Set<string>()
+
+  const walk = (obj: any) => {
+    if (!obj || typeof obj !== 'object') return
+    const legacy = obj.legacy
+    if (legacy?.full_text && legacy?.id_str && !seen.has(legacy.id_str)) {
+      seen.add(legacy.id_str)
       tweets.push({
-        id: t.id_str,
-        text: t.text,
-        date: t.created_at,
-        replyToId: t.in_reply_to_status_id_str ?? null,
-        convId: t.conversation_id_str ?? t.id_str,
+        id: legacy.id_str,
+        text: legacy.full_text,
+        date: legacy.created_at,
+        convId: legacy.conversation_id_str ?? legacy.id_str,
+        replyToId: legacy.in_reply_to_status_id_str ?? null,
       })
     }
-
-    return mergeThreads(tweets, username, source)
-  } catch {
-    return []
+    for (const v of Object.values(obj)) {
+      if (typeof v === 'object') walk(v)
+    }
   }
+
+  walk(data)
+  return tweets
 }
 
 // ── Auth ──
@@ -140,7 +166,7 @@ const loadAuthToken = (): string | null => {
 
 // ── Thread merging ──
 
-type RawTweet = { id: string; text: string; date: string; replyToId?: string | null; convId?: string }
+type RawTweet = { id: string; text: string; date: string; replyToId: string | null; convId: string }
 
 const mergeThreads = (tweets: RawTweet[], username: string, source: Source): FeedItem[] => {
   const byId = new Map<string, RawTweet>()
@@ -158,27 +184,12 @@ const mergeThreads = (tweets: RawTweet[], username: string, source: Source): Fee
       rootId = current.replyToId
       current = byId.get(current.replyToId)!
     }
-    if (tweet.convId && byId.has(tweet.convId)) rootId = tweet.convId
+    if (byId.has(tweet.convId)) rootId = tweet.convId
 
     const group = threadMap.get(rootId) ?? []
-    if (!assigned.has(tweet.id)) {
-      group.push(tweet)
-      assigned.add(tweet.id)
-    }
+    group.push(tweet)
+    assigned.add(tweet.id)
     threadMap.set(rootId, group)
-  }
-
-  for (const tweet of byId.values()) {
-    if (assigned.has(tweet.id)) continue
-    if (tweet.replyToId && assigned.has(tweet.replyToId)) {
-      for (const [, group] of threadMap) {
-        if (group.some(t => t.id === tweet.replyToId)) {
-          group.push(tweet)
-          assigned.add(tweet.id)
-          break
-        }
-      }
-    }
   }
 
   const items: FeedItem[] = []
@@ -205,12 +216,9 @@ const mergeThreads = (tweets: RawTweet[], username: string, source: Source): Fee
   return items.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
 }
 
-// ── Helpers ──
-
 const extractUsername = (url: string): string | null => {
   const { pathname } = new URL(url)
-  const match = pathname.match(/^\/?@?([\w]+)/)
-  return match?.[1] ?? null
+  return pathname.match(/^\/?@?([\w]+)/)?.[1] ?? null
 }
 
 const cleanTweetText = (text: string): string =>
