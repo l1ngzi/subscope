@@ -58,41 +58,77 @@ const fetchSyndication = async (username: string, source: Source): Promise<FeedI
     const data = JSON.parse(match[1]!)
     const entries: any[] = data?.props?.pageProps?.timeline?.entries ?? []
 
-    // Collect all tweets, grouped by conversation
-    const tweets: { id: string; text: string; date: string; convId: string; replyTo: string | null }[] = []
+    // Collect tweets
+    type Tweet = { id: string; text: string; date: string; replyTo: string | null; convId: string }
+    const tweetsById = new Map<string, Tweet>()
     for (const entry of entries) {
       const t = entry?.content?.tweet
       if (!t?.text || !t?.id_str) continue
       if (t.retweeted_status_result) continue
-      tweets.push({
+      tweetsById.set(t.id_str, {
         id: t.id_str,
         text: t.text,
         date: t.created_at,
-        convId: t.conversation_id_str ?? t.id_str,
         replyTo: t.in_reply_to_status_id_str ?? null,
+        convId: t.conversation_id_str ?? t.id_str,
       })
     }
 
-    // Group into threads by conversation_id
-    const threads = new Map<string, typeof tweets>()
-    for (const t of tweets) {
-      const group = threads.get(t.convId) ?? []
-      group.push(t)
-      threads.set(t.convId, group)
+    // Build threads: use conversation_id when available,
+    // fall back to reply chain walking
+    const threadMap = new Map<string, Tweet[]>()
+    const assigned = new Set<string>()
+
+    for (const tweet of tweetsById.values()) {
+      if (assigned.has(tweet.id)) continue
+
+      // Find thread root by walking reply chain upward
+      let rootId = tweet.id
+      let current = tweet
+      while (current.replyTo && tweetsById.has(current.replyTo)) {
+        rootId = current.replyTo
+        current = tweetsById.get(current.replyTo)!
+      }
+
+      // Also use conversation_id if it points to a known tweet
+      if (tweetsById.has(tweet.convId)) {
+        rootId = tweet.convId
+      }
+
+      const group = threadMap.get(rootId) ?? []
+      if (!assigned.has(tweet.id)) {
+        group.push(tweet)
+        assigned.add(tweet.id)
+      }
+      threadMap.set(rootId, group)
+    }
+
+    // Also sweep: attach any tweet whose replyTo is in an existing thread
+    for (const tweet of tweetsById.values()) {
+      if (assigned.has(tweet.id)) continue
+      if (tweet.replyTo && assigned.has(tweet.replyTo)) {
+        // Find which thread the parent belongs to
+        for (const [rootId, group] of threadMap) {
+          if (group.some(t => t.id === tweet.replyTo)) {
+            group.push(tweet)
+            assigned.add(tweet.id)
+            break
+          }
+        }
+      }
     }
 
     const items: FeedItem[] = []
-    for (const [convId, thread] of threads) {
-      // Sort thread: root first, then replies in order
-      thread.sort((a, b) => a.id.localeCompare(b.id))
+    for (const [rootId, thread] of threadMap) {
+      thread.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 
       const root = thread[0]!
       const title = cleanTweetText(root.text)
       const replies = thread.slice(1).map(t => cleanTweetText(t.text)).filter(Boolean)
-      const summary = replies.length > 0 ? replies.join(' · ') : undefined
+      const summary = replies.length > 0 ? replies.join(' \u00b7 ') : undefined
 
       items.push({
-        id: hash(source.id, convId),
+        id: hash(source.id, rootId),
         sourceId: source.id,
         sourceType: 'twitter',
         sourceName: source.name,
