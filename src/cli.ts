@@ -302,14 +302,20 @@ Write-Output "ok"
       return
     }
 
-    const token = args[1]
+    let token = args[1]
     if (!token) {
-      console.log('\n  To get your auth_token:')
-      console.log('  1. Open x.com in your browser (logged in)')
-      console.log('  2. F12 → Application → Cookies → x.com')
-      console.log('  3. Copy the value of "auth_token"')
-      console.log(`\n  Then run: subscope auth x <token>\n`)
-      return
+      const clip = Bun.spawnSync(['powershell', '-NoProfile', '-Command', 'Get-Clipboard'], { stdout: 'pipe' })
+      const clipText = new TextDecoder().decode(clip.stdout).replace(/[\r\n]+/g, '').trim()
+
+      if (clipText && /^[a-f0-9]{30,}$/.test(clipText)) {
+        token = clipText
+        console.log('\n  Read auth_token from clipboard.')
+      } else {
+        console.log('\n  Copy auth_token from x.com (F12 → Application → Cookies → auth_token)')
+        console.log('  Then run: subscope auth x')
+        console.log('  (reads from clipboard automatically)\n')
+        return
+      }
     }
 
     const { join } = await import('path')
