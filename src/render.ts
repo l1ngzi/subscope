@@ -42,6 +42,9 @@ const sourceColor = (name: string, type: string, group?: string): string => {
   if (g.startsWith('econ/sec') || n.includes('efts.sec') || n.includes('edgar')) return NAVY
   if (g.startsWith('econ/bls') || n.includes('bls.gov')) return c(107) // olive
   if (g.startsWith('econ/bea') || n.includes('bea.gov')) return c(107) // olive
+  if (g.startsWith('econ/ecb') || n.includes('ecb.europa')) return c(33)  // blue
+  if (g.startsWith('econ/treasury') || n.includes('treasury')) return c(220) // yellow
+  if (g.startsWith('econ/imf') || n.includes('imf.org')) return c(75) // light blue
   return PURPLE
 }
 
@@ -67,6 +70,9 @@ const formatSourceName = (name: string): string => {
   if (name.includes('efts.sec.gov') || name.includes('sec.gov')) return 'SEC EDGAR'
   if (name.includes('bls.gov')) return 'BLS'
   if (name.includes('bea.gov')) return 'BEA'
+  if (name.includes('ecb.europa')) return 'ECB'
+  if (name.includes('treasury.gov')) return 'US Treasury'
+  if (name.includes('imf.org')) return 'IMF'
   const parts = name
     .replace(/\.(com|org|net|io|ai|dev)/, '')
     .split('/')

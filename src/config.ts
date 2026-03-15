@@ -116,6 +116,9 @@ export const inferGroup = (url: string): string => {
   if (hostname.includes('sec.gov')) return 'econ/sec'
   if (hostname.includes('bls.gov')) return 'econ/bls'
   if (hostname.includes('bea.gov')) return 'econ/bea'
+  if (hostname.includes('ecb.europa.eu')) return 'econ/ecb'
+  if (hostname.includes('treasury.gov')) return 'econ/treasury'
+  if (hostname.includes('imf.org')) return 'econ/imf'
   return hostname.replace('www.', '').split('.')[0]!
 }
 
