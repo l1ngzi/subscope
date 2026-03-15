@@ -267,14 +267,22 @@ Write-Output "ok"
     }
 
     if (service === 'academic') {
-      const cookies = args.slice(1).join(' ')
+      let cookies = args.slice(1).join(' ')
+
       if (!cookies) {
-        console.log('\n  To get your academic cookies:')
-        console.log('  1. Log in to nature.com via your university')
-        console.log('  2. F12 → Network → any request to nature.com → Request Headers')
-        console.log('  3. Copy the full Cookie header value')
-        console.log(`\n  Then run: subscope auth academic "<full cookie string>"\n`)
-        return
+        // Try reading from clipboard
+        const clip = Bun.spawnSync(['powershell', '-NoProfile', '-Command', 'Get-Clipboard'], { stdout: 'pipe' })
+        const clipText = new TextDecoder().decode(clip.stdout).replace(/[\r\n]+/g, ' ').trim()
+
+        if (clipText && clipText.includes('=') && clipText.length > 20) {
+          cookies = clipText
+          console.log('\n  Read cookies from clipboard.')
+        } else {
+          console.log('\n  Copy the Cookie header from nature.com (F12 → Network → Request Headers)')
+          console.log('  Then run: subscope auth academic')
+          console.log('  (reads from clipboard automatically)\n')
+          return
+        }
       }
 
       const { join } = await import('path')
