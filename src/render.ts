@@ -31,6 +31,7 @@ const sourceColor = (name: string, type: string, group?: string): string => {
   if (g === 'openai' || n.includes('openai') || n.includes('openai')) return GREEN
   if (g === 'deepmind' || n.includes('deepmind') || n.includes('googledeepmind')) return BLUE
   if (g === 'deepseek' || n.includes('deepseek')) return TEAL
+  if (g === 'xai' || n.includes('x.ai') || n.includes('/xai') || n.includes('grok')) return c(231) // white
   if (n.includes('github')) return c(248) // light gray
   return PURPLE
 }

@@ -73,11 +73,14 @@ export const inferGroup = (url: string): string => {
     if (handle.includes('anthropic')) return 'anthropic'
     if (handle.includes('claude')) return 'claude'
     if (handle.includes('deepseek')) return 'deepseek'
+    if (handle.includes('openai')) return 'openai'
+    if (handle.includes('xai') || handle.includes('grok')) return 'xai'
     return handle || hostname.split('.')[0]!
   }
   if (hostname.includes('anthropic.com')) return 'anthropic'
   if (hostname.includes('claude')) return 'claude'
   if (hostname.includes('deepseek')) return 'deepseek'
+  if (hostname === 'x.ai') return 'xai'
   return hostname.replace('www.', '').split('.')[0]!
 }
 
