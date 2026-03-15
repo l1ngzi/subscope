@@ -122,7 +122,55 @@ export const renderFeed = (items: FeedItem[], olderCount = 0, hasSources = true)
   }
 }
 
-// ── Interactive pager ──
+// ── Interactive browser ──
+
+const NEW_BADGE = `\x1b[48;5;22m\x1b[38;5;46m NEW ${RESET}`
+const SEL_COLOR = '\x1b[48;5;237m'
+
+// Track seen items across sessions
+const SEEN_FILE = (() => {
+  const { join } = require('path') as typeof import('path')
+  const { homedir } = require('os') as typeof import('os')
+  return join(homedir(), '.subscope', 'seen.json')
+})()
+
+const loadSeen = (): Set<string> => {
+  try {
+    const { readFileSync, existsSync } = require('fs') as typeof import('fs')
+    if (!existsSync(SEEN_FILE)) return new Set()
+    return new Set(JSON.parse(readFileSync(SEEN_FILE, 'utf-8')))
+  } catch { return new Set() }
+}
+
+const saveSeen = (seen: Set<string>) => {
+  try {
+    const { writeFileSync } = require('fs') as typeof import('fs')
+    // Keep last 5000 IDs to avoid growing forever
+    const arr = [...seen].slice(-5000)
+    writeFileSync(SEEN_FILE, JSON.stringify(arr))
+  } catch {}
+}
+
+const formatItemSel = (item: FeedItem, maxWidth: number, selected: boolean, isNew: boolean): string[] => {
+  const color = sourceColor(item.sourceName, item.sourceType)
+  const bg = selected ? SEL_COLOR : ''
+  const lines: string[] = []
+  const cleanText = (s: string) => s.replace(/<[^>]*>/g, '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+  const badge = isNew ? ` ${NEW_BADGE}` : ''
+  const ptr = selected ? `${color}\u25b6${RESET}` : `${color}\u250c\u2500${RESET}`
+
+  lines.push(`${bg} ${ptr} ${BOLD}${truncate(cleanText(item.title), maxWidth - (isNew ? 6 : 0))}${RESET}${badge}`)
+  if (item.summary) {
+    const cleaned = cleanText(item.summary)
+    if (cleaned) lines.push(`${bg} ${color}\u2502${RESET}  ${DIM}${truncate(cleaned, maxWidth)}${RESET}`)
+  }
+  const srcName = formatSourceName(item.sourceName)
+  lines.push(`${bg} ${color}\u2502${RESET}  ${color}${srcName}${RESET} ${GRAY}\u00b7 ${timeAgo(item.publishedAt)}${RESET}`)
+  lines.push(`${bg} ${color}\u2502${RESET}  ${DIM}\u2192 ${item.url}${RESET}`)
+  lines.push('')
+  return lines
+}
 
 export const renderInteractive = (items: FeedItem[], olderCount = 0, hasSources = true): Promise<void> => {
   if (items.length === 0) {
@@ -130,47 +178,74 @@ export const renderInteractive = (items: FeedItem[], olderCount = 0, hasSources 
     return Promise.resolve()
   }
 
-  const maxWidth = cols() - PREFIX_LEN
-  const rendered = items.map(item => formatItem(item, maxWidth))
-
-  const footerHeight = 2
-  const availableRows = rows() - footerHeight
-  const pages: string[][] = []
-  let current: string[] = []
-
-  for (const group of rendered) {
-    if (current.length + group.length > availableRows && current.length > 0) {
-      pages.push(current)
-      current = []
-    }
-    current.push(...group)
-  }
-  if (current.length > 0) pages.push(current)
-
-  if (pages.length <= 1) {
+  if (items.length <= 3) {
     console.log()
-    for (const line of rendered.flat()) console.log(line)
+    const maxWidth = cols() - PREFIX_LEN
+    for (const item of items) for (const line of formatItem(item, maxWidth)) console.log(line)
     return Promise.resolve()
   }
 
-  let page = 0
+  let cursor = 0
+  const seen = loadSeen()
+  const newIds = new Set(items.filter(i => !seen.has(i.id)).map(i => i.id))
+  // Mark all as seen
+  for (const item of items) seen.add(item.id)
+  saveSeen(seen)
 
   const draw = () => {
-    process.stdout.write('\x1b[2J\x1b[H\n')
-    for (const line of pages[page]!) {
-      process.stdout.write(line + '\n')
-    }
-    const used = (pages[page]?.length ?? 0) + footerHeight + 1
-    const padding = Math.max(0, rows() - used)
-    for (let i = 0; i < padding; i++) process.stdout.write('\n')
+    const maxWidth = cols() - PREFIX_LEN
+    const h = rows()
 
-    const left = page > 0 ? '\u2190' : ' '
-    const right = page < pages.length - 1 ? '\u2192' : ' '
-    const status = ` ${left}  Page ${page + 1}/${pages.length}  ${right}`
-    const hint = 'q quit'
-    const gap = Math.max(1, cols() - status.length - hint.length - 2)
-    process.stdout.write(`${BG_BAR}${WHITE}${status}${' '.repeat(gap)}${DIM}${hint}${RESET}\n`)
+    // Calculate visible window around cursor
+    const itemHeights = items.map(item => {
+      const hasSummary = item.summary && item.summary.replace(/<[^>]*>/g, '').trim()
+      return hasSummary ? 5 : 4  // lines per item
+    })
+
+    // Find scroll offset so cursor is visible
+    let scrollStart = 0
+    let usedRows = 0
+    const available = h - 2 // status bar
+
+    // Sum heights until we reach cursor
+    let cursorTop = 0
+    for (let i = 0; i < cursor; i++) cursorTop += itemHeights[i]!
+
+    // If cursor would be below viewport, scroll down
+    while (cursorTop - scrollStart + itemHeights[cursor]! > available) scrollStart += itemHeights[scrollStart]!
+    // Convert scrollStart from pixels to item index
+    // Actually just use item-based scrolling
+    let startIdx = 0
+    let totalH = 0
+    for (let i = 0; i < items.length; i++) {
+      if (totalH + itemHeights[i]! > available && i <= cursor) {
+        startIdx = i
+        totalH = 0
+      }
+      totalH += itemHeights[i]!
+    }
+    // Ensure cursor is in view
+    if (startIdx > cursor) startIdx = cursor
+
+    const lines: string[] = []
+    for (let i = startIdx; i < items.length; i++) {
+      const itemLines = formatItemSel(items[i]!, maxWidth, i === cursor, newIds.has(items[i]!.id))
+      if (lines.length + itemLines.length > available) break
+      lines.push(...itemLines)
+    }
+
+    while (lines.length < available) lines.push('')
+
+    const pos = `${cursor + 1}/${items.length}`
+    const hint = '\u2191\u2193 browse  enter open  q quit'
+    const gap = Math.max(1, cols() - pos.length - hint.length - 4)
+    lines.push(`${BG_BAR}${WHITE} ${pos}${' '.repeat(gap)}${DIM}${hint}${RESET}`)
+
+    process.stdout.write(`\x1b[H\x1b[?25l${lines.map(l => l + '\x1b[K').join('\n')}\x1b[J`)
   }
+
+  process.stdout.write('\x1b[?1049h')
+  draw()
 
   return new Promise<void>(resolve => {
     process.stdin.setRawMode(true)
@@ -178,21 +253,34 @@ export const renderInteractive = (items: FeedItem[], olderCount = 0, hasSources 
     process.stdin.setEncoding('utf-8')
 
     const cleanup = () => {
+      process.stdout.write('\x1b[?25h\x1b[?1049l')
       process.stdin.setRawMode(false)
       process.stdin.pause()
       process.stdin.removeListener('data', onKey)
-      process.stdout.write('\x1b[2J\x1b[H')
       resolve()
     }
 
+    const openUrl = (url: string) => {
+      Bun.spawnSync(['cmd', '/c', 'start', '', url.replace(/&/g, '^&')], { stdout: 'ignore', stderr: 'ignore' })
+    }
+
     const onKey = (key: string) => {
-      if (key === 'q' || key === '\x1b' || key === '\x03') { cleanup(); return }
-      if ((key === '\x1b[C' || key === 'l') && page < pages.length - 1) { page++; draw() }
-      if ((key === '\x1b[D' || key === 'h') && page > 0) { page--; draw() }
+      if (key === 'q' || key === '\x03') { cleanup(); return }
+      if (key === '\x1b[A' || key === 'k') {
+        if (cursor > 0) { cursor--; newIds.delete(items[cursor]!.id); draw() }
+        return
+      }
+      if (key === '\x1b[B' || key === 'j') {
+        if (cursor < items.length - 1) { cursor++; newIds.delete(items[cursor]!.id); draw() }
+        return
+      }
+      if (key === '\r') {
+        openUrl(items[cursor]!.url)
+        return
+      }
     }
 
     process.stdin.on('data', onKey)
-    draw()
   })
 }
 
