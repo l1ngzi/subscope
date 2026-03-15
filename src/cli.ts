@@ -240,14 +240,16 @@ if (!command || command.startsWith('-') || isMode) {
   const opts = parseReadFlags(readArgs)
   if (isMode) opts.mode = command
   const { items, olderCount } = read(opts)
+  const cfg = load()
+  const hasSources = cfg.sources.length > 0
 
   const isTTY = process.stdout.isTTY
   const explicitLimit = opts.limit !== undefined
 
   if (isTTY && !explicitLimit) {
-    await renderInteractive(items)
+    await renderInteractive(items, olderCount, hasSources)
   } else {
-    renderFeed(items, olderCount)
+    renderFeed(items, olderCount, hasSources)
   }
 } else if (commands[command]) {
   await commands[command]!()

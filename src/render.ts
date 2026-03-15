@@ -60,11 +60,18 @@ const formatItem = (item: FeedItem, maxWidth: number): string[] => {
 
 // ── non-interactive (for pipes / -n) ──
 
-export const renderFeed = (items: FeedItem[], olderCount = 0): void => {
+export const renderFeed = (items: FeedItem[], olderCount = 0, hasSources = true): void => {
   if (items.length === 0) {
-    console.log(`\n${DIM}  No items yet. Try:${RESET}`)
-    console.log(`${DIM}    subscope add <url>${RESET}`)
-    console.log(`${DIM}    subscope fetch${RESET}\n`)
+    if (!hasSources) {
+      console.log(`\n${DIM}  No sources configured. Try:${RESET}`)
+      console.log(`${DIM}    subscope add <url>${RESET}`)
+      console.log(`${DIM}    subscope fetch${RESET}\n`)
+    } else if (olderCount > 0) {
+      console.log(`\n${DIM}  No updates in the last 14 days.${RESET}`)
+      console.log(`${DIM}  ${olderCount} older items available: subscope --all${RESET}\n`)
+    } else {
+      console.log(`\n${DIM}  No items yet. Try: subscope fetch${RESET}\n`)
+    }
     return
   }
 
@@ -82,11 +89,9 @@ export const renderFeed = (items: FeedItem[], olderCount = 0): void => {
 
 // ── interactive pager ──
 
-export const renderInteractive = (items: FeedItem[]): Promise<void> => {
+export const renderInteractive = (items: FeedItem[], olderCount = 0, hasSources = true): Promise<void> => {
   if (items.length === 0) {
-    console.log(`\n${DIM}  No items yet. Try:${RESET}`)
-    console.log(`${DIM}    subscope add <url>${RESET}`)
-    console.log(`${DIM}    subscope fetch${RESET}\n`)
+    renderFeed(items, olderCount, hasSources)
     return Promise.resolve()
   }
 
