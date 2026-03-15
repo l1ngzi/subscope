@@ -10,7 +10,7 @@ export const website: SourceAdapter = {
   test: () => true,
 
   async fetch(source: Source): Promise<FeedItem[]> {
-    const res = await globalThis.fetch(source.url)
+    const res = await globalThis.fetch(source.url, { tls: { rejectUnauthorized: false } } as any)
     const text = await res.text()
     const contentType = res.headers.get('content-type') ?? ''
 
@@ -67,7 +67,7 @@ const parseFeed = (xml: string, source: Source): FeedItem[] => {
 }
 
 const fetchFeed = async (feedUrl: string, source: Source): Promise<FeedItem[]> => {
-  const xml = await globalThis.fetch(feedUrl).then(r => r.text())
+  const xml = await globalThis.fetch(feedUrl, { tls: { rejectUnauthorized: false } } as any).then(r => r.text())
   return parseFeed(xml, source)
 }
 

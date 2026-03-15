@@ -7,6 +7,7 @@ import { detectType } from './adapters/index.ts'
 import { renderFeed, renderInteractive, renderSources, renderGroups } from './render.ts'
 import { interactiveConfig } from './interactive.ts'
 import { notify } from './notify.ts'
+import { readArticle } from './reader.ts'
 import { createHash } from 'crypto'
 import type { Source } from './types.ts'
 
@@ -337,6 +338,21 @@ Write-Output "ok"
     console.log('\n  X auth token saved. Stale accounts will now use Playwright.\n')
   },
 
+  read: async () => {
+    const url = args[0]
+    if (!url) {
+      console.error('Usage: subscope read <url>')
+      process.exit(1)
+    }
+    try {
+      const { title, text } = await readArticle(url)
+      console.log(`# ${title}\n\n${text}`)
+    } catch (e: any) {
+      console.error(`Failed to read: ${e.message}`)
+      process.exit(1)
+    }
+  },
+
   mode: async () => {
     const config = load()
     const target = args[0]
@@ -349,7 +365,8 @@ Write-Output "ok"
         const icon = isDefault ? `\x1b[36m\u25cf\x1b[0m` : `\x1b[90m\u25cb\x1b[0m`
         const label = isDefault ? `\x1b[1m${name}\x1b[0m` : `\x1b[90m${name}\x1b[0m`
         const def = isDefault ? ` \x1b[2m(default)\x1b[0m` : ''
-        console.log(`  ${icon} ${label}  \x1b[2m${m.types.join(', ')}${def}\x1b[0m`)
+        const parts = [m.types?.join(', '), m.groups?.map(g => `[${g}]`).join(', ')].filter(Boolean).join(' ')
+        console.log(`  ${icon} ${label}  \x1b[2m${parts}${def}\x1b[0m`)
       }
       console.log(`\n  \x1b[2msubscope mode <name>  set default\x1b[0m`)
       console.log()

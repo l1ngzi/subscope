@@ -105,7 +105,7 @@ export const interactiveConfig = (): Promise<void> => {
     if (!p) {
       r.push({ kind: 'label', text: 'Default Mode' })
       for (const [name, m] of Object.entries(cfg.modes))
-        r.push({ kind: 'mode', key: name, text: `${name}  ${D}${m.types.join(', ')}${R}`, active: cfg.defaultMode === name })
+        r.push({ kind: 'mode', key: name, text: `${name}  ${D}${[m.types?.join(', '), m.groups?.map(g => `[${g}]`).join(', ')].filter(Boolean).join(' ')}${R}`, active: cfg.defaultMode === name })
       r.push({ kind: 'gap', text: '' })
       r.push({ kind: 'label', text: 'Groups' })
     }

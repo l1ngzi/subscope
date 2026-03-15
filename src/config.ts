@@ -7,7 +7,8 @@ import type { Source } from './types.ts'
 export type ModeName = 'formal' | 'quick' | string
 
 export interface ModeConfig {
-  types: string[]  // source types to include
+  types?: string[]   // source types to include
+  groups?: string[]  // source group prefixes to include
 }
 
 export interface Config {
@@ -21,6 +22,7 @@ export interface Config {
 const DEFAULT_MODES: Record<string, ModeConfig> = {
   formal: { types: ['website'] },
   quick: { types: ['youtube', 'twitter'] },
+  eco: { groups: ['econ'] },
 }
 
 const SUBSCOPE_DIR = join(homedir(), '.subscope')
@@ -107,6 +109,13 @@ export const inferGroup = (url: string): string => {
   if (hostname.includes('openai.com')) return 'ai/openai'
   if (hostname.includes('deepmind')) return 'ai/deepmind'
   if (hostname === 'x.ai') return 'ai/xai'
+  // Economics & Finance
+  if (hostname.includes('federalreserve.gov')) return 'econ/fed'
+  if (hostname.includes('pbc.gov.cn')) return 'econ/pboc'
+  if (hostname.includes('stats.gov.cn')) return 'econ/nbs'
+  if (hostname.includes('sec.gov')) return 'econ/sec'
+  if (hostname.includes('bls.gov')) return 'econ/bls'
+  if (hostname.includes('bea.gov')) return 'econ/bea'
   return hostname.replace('www.', '').split('.')[0]!
 }
 
@@ -119,7 +128,11 @@ export const activeSources = (config: Config, opts?: { group?: string; mode?: st
     if (!s.active) return false
     if (opts?.group) return s.group === opts.group || s.group.startsWith(opts.group + '/')
     if (!config.activeGroups.some(g => s.group === g || s.group.startsWith(g + '/'))) return false
-    if (modeConfig) return modeConfig.types.includes(s.type)
+    if (modeConfig) {
+      if (modeConfig.types && !modeConfig.types.includes(s.type)) return false
+      if (modeConfig.groups && !modeConfig.groups.some(g => s.group === g || s.group.startsWith(g + '/'))) return false
+      return true
+    }
     return true
   })
 }

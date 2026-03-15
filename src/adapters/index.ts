@@ -7,6 +7,11 @@ import { fetchClaude } from './sites/claude.ts'
 import { fetchDeepSeek } from './sites/deepseek.ts'
 import { fetchXai } from './sites/xai.ts'
 import { fetchSupportCollection, fetchReleaseNotes } from './sites/support-claude.ts'
+import { fetchPBOC } from './sites/pboc.ts'
+import { fetchNBS } from './sites/nbs.ts'
+import { fetchSEC } from './sites/sec.ts'
+import { fetchBEA } from './sites/bea.ts'
+import { fetchBLS } from './sites/bls.ts'
 import type { SourceAdapter, SourceType } from '../types.ts'
 
 // Site-specific adapters — matched by (hostname, pathPrefix)
@@ -18,6 +23,11 @@ const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[
   { host: 'api-docs.deepseek.com', fetch: fetchDeepSeek },
   { host: 'claude.com', fetch: fetchClaude },
   { host: 'anthropic.com', fetch: fetchAnthropic },
+  { host: 'pbc.gov.cn', fetch: fetchPBOC },
+  { host: 'stats.gov.cn', fetch: fetchNBS },
+  { host: 'efts.sec.gov', fetch: fetchSEC },
+  { host: 'bea.gov', fetch: fetchBEA },
+  { host: 'bls.gov', fetch: fetchBLS },
 ]
 
 const matchSite = (url: string): SourceAdapter['fetch'] | undefined => {

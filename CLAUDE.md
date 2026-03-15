@@ -4,13 +4,13 @@ Project context for AI assistants working on this codebase.
 
 ## What this is
 
-subscope is a personal CLI feed aggregator. It pulls first-hand information from AI companies and academic journals into one terminal interface. Built for one user, optimized for speed and precision over generality.
+subscope is a personal CLI feed aggregator. It pulls first-hand information from AI companies, academic journals, and economic/financial institutions into one terminal interface. Built for one user, optimized for speed and precision over generality.
 
 ## Philosophy
 
 - Pure raw information, no AI processing in the feed pipeline
 - Each source gets the best possible adapter, not a generic one
-- Fast: 23 sources fetch concurrently in 2 seconds
+- Fast: 29 sources fetch concurrently in 2 seconds
 - No heavy dependencies: no Playwright, no Puppeteer, no Python
 - Code should read like it was written by someone who cares
 
@@ -46,6 +46,12 @@ src/
       support-claude.ts     Intercom collection + release notes parser
       deepseek.ts           Changelog page with dated news links
       xai.ts                x.ai/news page scraper
+      pboc.ts               People's Bank of China news scraper
+      nbs.ts                China National Bureau of Statistics (RSS + HTML)
+      bls.ts                Bureau of Labor Statistics RSS indicator parser
+      bea.ts                Bureau of Economic Analysis releases scraper
+      sec.ts                SEC EDGAR JSON API (filing search)
+  reader.ts                 Article full-text extractor (per-site selectors)
 ```
 
 ## Key architectural decisions
@@ -66,10 +72,16 @@ Website adapter detects RSS/Atom by content-type or XML declaration. Handles `pu
 Path-based strings: `ai/anthropic`, `photonics`. Filtering with `-g ai` matches prefix. `activeGroups` list determines what shows in default view. `folders` list persists empty folders independently of sources.
 
 ### Modes
-`formal` = website sources. `quick` = youtube + twitter. `-g` flag bypasses mode filtering. Custom modes configurable in YAML.
+`formal` = website sources. `quick` = youtube + twitter. `eco` = economics/finance (`econ/*` groups). Modes can filter by `types` (source type) and/or `groups` (group prefix). `-g` flag bypasses mode filtering. Custom modes configurable in YAML.
 
 ### Interactive browser
 Alternate screen buffer. Item-by-item navigation with auto-scrolling viewport. Search box at top (cursor = -1). NEW badges tracked via `seen.json`. PDF download via URL pattern matching (Nature `.pdf` suffix, arXiv `/pdf/` path).
+
+### Economics & Finance sources
+Six sources under the `econ/` group: Federal Reserve (RSS), PBOC (HTML scrape), NBS (RSS/HTML), BLS (RSS with full browser headers to bypass Akamai), BEA (HTML scrape), SEC EDGAR (JSON API at `efts.sec.gov`). Each has a dedicated adapter with site-specific parsing. Color-coded: Fed=sky blue, PBOC=red, NBS=gold, BLS/BEA=olive, SEC=navy.
+
+### Article reader (`subscope read`)
+Fetches article URL, extracts clean text using per-site CSS selectors (BEA: `.field--name-body.field--item`, PBOC: `#zoom`, NBS: `.txt-content`, Fed: `#article .col-sm-8`). Output is `# Title\n\ntext` — pipe-friendly for LLM consumption. Generic fallback for unknown sites.
 
 ### Thread merging (X)
 Group tweets by `conversation_id_str`. Walk `in_reply_to_status_id_str` chain for threads missing conversation_id. Root tweet becomes title, replies concatenated into summary.
@@ -107,10 +119,19 @@ If the site has RSS or standard HTML, the generic website adapter handles it aut
 - Dedup: hash-based IDs, `INSERT OR IGNORE` in SQLite
 - Error handling: adapters throw on auth issues, return `[]` on parse failures. Pipeline uses `Promise.allSettled` so one failure doesn't block others.
 - Text cleanup: `cleanTweetText()` strips t.co links. `cleanText()` strips HTML tags and collapses whitespace.
+- TLS: all fetch calls use `tls: { rejectUnauthorized: false }` (Bun-specific) to handle proxy/cert issues with government sites.
+- Anti-bot: BLS requires full `Sec-Fetch-*` browser headers. SEC EDGAR requires declared User-Agent.
 
 ## Testing
 
 No test suite. The tool is tested by using it. If `subscope fetch && subscope` works, it works.
+
+## Commit checklist
+
+When committing changes, always update these docs together:
+- `CLAUDE.md` — project context (this file)
+- `README.md` — user-facing documentation
+- `COMMANDS.md` — command reference
 
 ## Platform notes
 

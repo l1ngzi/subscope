@@ -19,6 +19,8 @@ const BLUE = c(75)       // X / Twitter
 const GREEN = c(114)     // GitHub
 const TEAL = c(80)       // DeepSeek
 const PURPLE = c(141)    // default / other
+const GOLD = c(178)      // Economics
+const NAVY = c(27)       // SEC
 
 // ── Source color mapping ──
 
@@ -33,6 +35,13 @@ const sourceColor = (name: string, type: string, group?: string): string => {
   if (g === 'deepseek' || n.includes('deepseek')) return TEAL
   if (g === 'xai' || n.includes('x.ai') || n.includes('/xai') || n.includes('grok')) return c(231) // white
   if (n.includes('github')) return c(248) // light gray
+  // Economics & Finance
+  if (g.startsWith('econ/fed') || n.includes('federalreserve')) return c(39)  // sky blue
+  if (g.startsWith('econ/pboc') || n.includes('pbc.gov')) return c(160) // red
+  if (g.startsWith('econ/nbs') || n.includes('stats.gov')) return GOLD
+  if (g.startsWith('econ/sec') || n.includes('efts.sec') || n.includes('edgar')) return NAVY
+  if (g.startsWith('econ/bls') || n.includes('bls.gov')) return c(107) // olive
+  if (g.startsWith('econ/bea') || n.includes('bea.gov')) return c(107) // olive
   return PURPLE
 }
 
@@ -51,6 +60,13 @@ const formatSourceName = (name: string): string => {
     const slug = name.split('/').pop()?.replace(/^\d+-/, '') ?? 'support'
     return `Claude Support \u00b7 ${slug}`
   }
+  // Economics & Finance
+  if (name.includes('federalreserve.gov')) return 'Federal Reserve'
+  if (name.includes('pbc.gov.cn')) return '\u4e2d\u56fd\u4eba\u6c11\u94f6\u884c'  // 中国人民银行
+  if (name.includes('stats.gov.cn')) return '\u56fd\u5bb6\u7edf\u8ba1\u5c40'      // 国家统计局
+  if (name.includes('efts.sec.gov') || name.includes('sec.gov')) return 'SEC EDGAR'
+  if (name.includes('bls.gov')) return 'BLS'
+  if (name.includes('bea.gov')) return 'BEA'
   const parts = name
     .replace(/\.(com|org|net|io|ai|dev)/, '')
     .split('/')

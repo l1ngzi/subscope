@@ -27,15 +27,17 @@ export const fetchAll = async (): Promise<number> => {
 
   let total = 0
   let newItems = 0
-  for (const result of results) {
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i]!
+    const source = config.sources[i]!
     if (result.status === 'fulfilled') {
-      const { source, items } = result.value
+      const { items } = result.value
       const added = store.save(items)
       total += items.length
       newItems += added
       console.log(`  ${source.name} — ${items.length} items${added > 0 ? ` (${added} new)` : ''}`)
     } else {
-      console.error(`  failed: ${result.reason}`)
+      console.error(`  ${source.name} — failed: ${result.reason}`)
     }
   }
 
