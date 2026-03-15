@@ -44,6 +44,17 @@ const SITES: SiteRule[] = [
     },
   },
   {
+    test: u => u.includes('sec.gov/Archives'),
+    selector: 'body',
+    title: 'title',
+    pick: ($: cheerio.CheerioAPI) => {
+      // SEC filings: remove XBRL hidden/metadata elements, keep visible content
+      const $body = $('body').clone()
+      $body.find('[style*="display:none"], [style*="display: none"], ix\\:hidden, .xbrl').remove()
+      return $body
+    },
+  },
+  {
     test: u => u.includes('bls.gov'),
     selector: '#bodytext, pre, .centerDiv',
     headers: {
@@ -59,6 +70,16 @@ const SITES: SiteRule[] = [
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 
 export const readArticle = async (url: string): Promise<{ title: string; text: string }> => {
+  // SEC EDGAR: filing index pages → auto-follow to the actual document
+  if (url.includes('sec.gov') && url.includes('-index.htm')) {
+    const resolved = await resolveEdgarDoc(url)
+    if (resolved) {
+      const result = await readArticle(resolved.docUrl)
+      if (resolved.title) result.title = resolved.title
+      return result
+    }
+  }
+
   const site = SITES.find(s => s.test(url))
   const headers: Record<string, string> = {
     'User-Agent': UA,
@@ -73,7 +94,6 @@ export const readArticle = async (url: string): Promise<{ title: string; text: s
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     html = await res.text()
   } catch {
-    // Fallback: use Playwright for sites that block non-browser requests or have cert issues
     html = await fetchWithBrowser(url)
   }
   const $ = cheerio.load(html)
@@ -254,6 +274,50 @@ const extractText = ($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): string =
     .replace(/\n{3,}/g, '\n\n')         // max 2 consecutive newlines
     .replace(/\u00a0/g, ' ')           // replace nbsp
     .trim()
+}
+
+// SEC EDGAR: resolve filing index page → main document URL + title
+const resolveEdgarDoc = async (indexUrl: string): Promise<{ docUrl: string; title: string } | null> => {
+  try {
+    const res = await fetch(indexUrl, {
+      headers: { 'User-Agent': 'Subscope/1.0 (personal feed aggregator)' },
+      tls: { rejectUnauthorized: false },
+    } as any)
+    if (!res.ok) return null
+    const html = await res.text()
+    const $ = cheerio.load(html)
+
+    // Extract company name via CIK from URL + EDGAR submissions API
+    const cikMatch = indexUrl.match(/\/data\/(\d+)\//)
+    let company = ''
+    let formType = ''
+    if (cikMatch) {
+      try {
+        const cik = cikMatch[1]!.padStart(10, '0')
+        const api = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+          headers: { 'User-Agent': 'Subscope/1.0 (personal feed aggregator)' },
+          tls: { rejectUnauthorized: false },
+        } as any)
+        if (api.ok) {
+          const data = await api.json() as any
+          company = data.name ?? ''
+        }
+      } catch {}
+    }
+    // Get form type from page text
+    const pageText = $.text()
+    const formMatch = pageText.match(/Form\s+(8-K|10-K|10-Q|8-K\/A)/i)
+    formType = formMatch?.[1] ?? '8-K'
+    const title = company ? `[${formType}] ${company}` : formType
+
+    // The iXBRL viewer link contains the main document path: /ix?doc=/Archives/...
+    const ixMatch = html.match(/\/ix\?doc=(\/Archives\/[^"'&]+\.htm)/)
+    if (ixMatch) return { docUrl: `https://www.sec.gov${ixMatch[1]}`, title }
+    // Fallback: first .htm file in /Archives/ that isn't an exhibit
+    const archiveMatch = html.match(/href="(\/Archives\/[^"]+\.htm)"/)
+    if (archiveMatch) return { docUrl: `https://www.sec.gov${archiveMatch[1]}`, title }
+    return null
+  } catch { return null }
 }
 
 // Playwright fallback for anti-bot sites (BLS, etc.)
