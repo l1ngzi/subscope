@@ -15,18 +15,25 @@ export interface ReadOpts {
 export const fetchAll = async (): Promise<number> => {
   const config = load()
   const store = createStore()
-  let total = 0
 
-  // Fetch ALL sources (not just active), so data is ready when groups are toggled
-  for (const source of config.sources) {
-    const adapter = resolve(source.url)
-    try {
+  // Fetch all sources concurrently
+  const results = await Promise.allSettled(
+    config.sources.map(async (source) => {
+      const adapter = resolve(source.url)
       const items = await adapter.fetch(source)
+      return { source, items }
+    })
+  )
+
+  let total = 0
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      const { source, items } = result.value
       store.save(items)
       total += items.length
       console.log(`  ${source.name} — ${items.length} items`)
-    } catch (err) {
-      console.error(`  ${source.name} — failed: ${err}`)
+    } else {
+      console.error(`  failed: ${result.reason}`)
     }
   }
 
