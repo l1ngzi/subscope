@@ -1,62 +1,56 @@
-// Node-only script — extracts X auth_token via Playwright
+// Node-only script — extracts X auth_token from Chrome's existing session
 // Usage: node x-auth.cjs
 // Output: auth_token value to stdout
 
 const { chromium } = require('playwright')
+const { join } = require('path')
+const { homedir } = require('os')
+
+const CHROME_USER_DATA = join(homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'User Data')
 
 async function main() {
-  // Try headless first — check if existing Chrome profile has cookies
-  const browser = await chromium.launch({
+  // Launch Chrome with the user's actual profile — already logged in
+  const context = await chromium.launchPersistentContext(CHROME_USER_DATA, {
     headless: false,
     channel: 'chrome',
+    args: ['--profile-directory=Default'],
   })
 
-  const context = await browser.newContext()
   const page = await context.newPage()
-
-  // Navigate to X
   await page.goto('https://x.com/home', {
     waitUntil: 'domcontentloaded',
     timeout: 15000,
   })
 
-  // Check if we're logged in (redirected to login page or home)
   const url = page.url()
   const isLoggedIn = !url.includes('/login') && !url.includes('/i/flow')
 
   if (isLoggedIn) {
-    // Already logged in — grab cookie
+    // Already logged in — grab cookie and close
     const cookies = await context.cookies('https://x.com')
-    const authToken = cookies.find(c => c.name === 'auth_token')?.value
-    if (authToken) {
-      await browser.close()
-      process.stdout.write(authToken)
+    const token = cookies.find(c => c.name === 'auth_token')?.value
+    await page.close()
+    await context.close()
+    if (token) {
+      process.stdout.write(token)
       return
     }
+    process.stderr.write('Logged in but no auth_token cookie found.\n')
+    process.exit(1)
   }
 
-  // Not logged in — show visible browser for user to log in
-  await browser.close()
-
-  const browser2 = await chromium.launch({
-    headless: false,
-    channel: 'chrome',
-  })
-  const context2 = await browser2.newContext()
-  const page2 = await context2.newPage()
-
-  await page2.goto('https://x.com/login', {
+  // Not logged in — navigate to login, wait for user
+  await page.goto('https://x.com/login', {
     waitUntil: 'domcontentloaded',
     timeout: 15000,
   })
+  process.stderr.write('Please log in to X in the browser window...\n')
 
-  // Wait for user to log in — poll for auth_token cookie
-  process.stderr.write('Waiting for login...\n')
-
+  // Poll for auth_token cookie (2 minutes max)
   let token = null
-  for (let i = 0; i < 120; i++) {  // 2 minutes max
-    await page2.waitForTimeout(1000)
-    const cookies = await context2.cookies('https://x.com')
+  for (let i = 0; i < 120; i++) {
+    await page.waitForTimeout(1000)
+    const cookies = await context.cookies('https://x.com')
     const found = cookies.find(c => c.name === 'auth_token')
     if (found) {
       token = found.value
@@ -64,7 +58,8 @@ async function main() {
     }
   }
 
-  await browser2.close()
+  await page.close()
+  await context.close()
 
   if (token) {
     process.stdout.write(token)
