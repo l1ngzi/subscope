@@ -58,20 +58,48 @@ const fetchSyndication = async (username: string, source: Source): Promise<FeedI
     const data = JSON.parse(match[1]!)
     const entries: any[] = data?.props?.pageProps?.timeline?.entries ?? []
 
-    const items: FeedItem[] = []
+    // Collect all tweets, grouped by conversation
+    const tweets: { id: string; text: string; date: string; convId: string; replyTo: string | null }[] = []
     for (const entry of entries) {
-      const tweet = entry?.content?.tweet
-      if (!tweet?.text || !tweet?.id_str) continue
-      if (tweet.retweeted_status_result) continue
+      const t = entry?.content?.tweet
+      if (!t?.text || !t?.id_str) continue
+      if (t.retweeted_status_result) continue
+      tweets.push({
+        id: t.id_str,
+        text: t.text,
+        date: t.created_at,
+        convId: t.conversation_id_str ?? t.id_str,
+        replyTo: t.in_reply_to_status_id_str ?? null,
+      })
+    }
+
+    // Group into threads by conversation_id
+    const threads = new Map<string, typeof tweets>()
+    for (const t of tweets) {
+      const group = threads.get(t.convId) ?? []
+      group.push(t)
+      threads.set(t.convId, group)
+    }
+
+    const items: FeedItem[] = []
+    for (const [convId, thread] of threads) {
+      // Sort thread: root first, then replies in order
+      thread.sort((a, b) => a.id.localeCompare(b.id))
+
+      const root = thread[0]!
+      const title = cleanTweetText(root.text)
+      const replies = thread.slice(1).map(t => cleanTweetText(t.text)).filter(Boolean)
+      const summary = replies.length > 0 ? replies.join(' · ') : undefined
 
       items.push({
-        id: hash(source.id, tweet.id_str),
+        id: hash(source.id, convId),
         sourceId: source.id,
         sourceType: 'twitter',
         sourceName: source.name,
-        title: cleanTweetText(tweet.text),
-        url: `https://x.com/${username}/status/${tweet.id_str}`,
-        publishedAt: new Date(tweet.created_at).toISOString(),
+        title,
+        url: `https://x.com/${username}/status/${root.id}`,
+        summary: summary?.slice(0, 300),
+        publishedAt: new Date(root.date).toISOString(),
       })
     }
 
