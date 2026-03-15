@@ -261,7 +261,7 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
     const pos = cursor >= 0 ? `${cursor + 1}/${items.length}` : `${items.length} items`
     const hint = cursor === -1
       ? 'type to search  \u2193 browse  q quit'
-      : '\u2191\u2193 browse  / search  enter open  q quit'
+      : '\u2191\u2193 browse  / search  enter open  g pdf  q quit'
     const gap = Math.max(1, cols() - pos.length - hint.length - 4)
     lines.push(`${BG_BAR}${WHITE} ${pos}${' '.repeat(gap)}${DIM}${hint}${RESET}`)
 
@@ -286,6 +286,40 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
 
     const openUrl = (url: string) => {
       Bun.spawnSync(['cmd', '/c', 'start', '', url.replace(/&/g, '^&')], { stdout: 'ignore', stderr: 'ignore' })
+    }
+
+    const downloadPaper = async (item: FeedItem) => {
+      const pdfUrl = toPdfUrl(item.url)
+      if (!pdfUrl) return
+
+      const { join } = require('path') as typeof import('path')
+      const { homedir } = require('os') as typeof import('os')
+      const { writeFileSync, mkdirSync, existsSync } = require('fs') as typeof import('fs')
+
+      const dir = join(homedir(), 'Downloads', 'subscope')
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+
+      // Clean filename from title
+      const safeName = item.title.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80)
+      const filePath = join(dir, `${safeName}.pdf`)
+
+      // Show downloading status
+      const maxWidth = cols() - PREFIX_LEN
+      const statusLine = `  ${DIM}Downloading: ${safeName}.pdf ...${RESET}`
+      process.stdout.write(`\x1b[${rows() - 1};1H\x1b[K${statusLine}`)
+
+      try {
+        const res = await fetch(pdfUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+        if (!res.ok) throw new Error(`${res.status}`)
+        const buf = await res.arrayBuffer()
+        writeFileSync(filePath, Buffer.from(buf))
+        process.stdout.write(`\x1b[${rows() - 1};1H\x1b[K  ${DIM}Saved: ${filePath}${RESET}`)
+      } catch (e) {
+        // Fallback: open PDF URL in browser (university proxy will handle auth)
+        openUrl(pdfUrl)
+        process.stdout.write(`\x1b[${rows() - 1};1H\x1b[K  ${DIM}Opened in browser${RESET}`)
+      }
+      setTimeout(draw, 1500)
     }
 
     const onKey = (key: string) => {
@@ -320,10 +354,30 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
       }
       if (key === '/') { cursor = -1; draw(); return } // jump to search
       if (key === '\r') { openUrl(items[cursor]!.url); return }
+      if (key === 'g') { downloadPaper(items[cursor]!); return }
     }
 
     process.stdin.on('data', onKey)
   })
+}
+
+// ── PDF URL resolver ──
+
+const toPdfUrl = (url: string): string | null => {
+  // Nature journals: append .pdf
+  if (url.includes('nature.com/articles/')) return url + '.pdf'
+  // arXiv: /abs/ → /pdf/
+  if (url.includes('arxiv.org/abs/')) return url.replace('/abs/', '/pdf/') + '.pdf'
+  // Science: append .full.pdf
+  if (url.includes('science.org/doi/')) return url.replace('/doi/', '/doi/pdf/')
+  // IEEE: convert to PDF endpoint
+  if (url.includes('ieeexplore.ieee.org')) {
+    const id = url.match(/document\/(\d+)/)?.[1]
+    if (id) return `https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?arnumber=${id}`
+  }
+  // ACS: append .pdf
+  if (url.includes('pubs.acs.org/doi/')) return url.replace('/doi/', '/doi/pdf/')
+  return null
 }
 
 // ── Sources list ──
