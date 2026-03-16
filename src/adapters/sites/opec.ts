@@ -1,38 +1,64 @@
 import * as cheerio from 'cheerio'
+import { join } from 'path'
 import { item, sortDesc, UA } from '../../lib.ts'
 import type { Source, FeedItem } from '../../types.ts'
 
 const BASE = 'https://www.opec.org'
 
+// OPEC blocks fetch (403) — needs Playwright
+const fetchPage = (url: string): string => {
+  const projectRoot = join(import.meta.dir, '..', '..')
+  const script = [
+    `const{chromium}=require('playwright');`,
+    `(async()=>{`,
+    `const b=await chromium.launch({headless:true,channel:'chrome',`,
+    `args:['--disable-blink-features=AutomationControlled','--ignore-certificate-errors']});`,
+    `const ctx=await b.newContext({ignoreHTTPSErrors:true,userAgent:${JSON.stringify(UA)}});`,
+    `const p=await ctx.newPage();`,
+    `await p.addInitScript(()=>{Object.defineProperty(navigator,'webdriver',{get:()=>false})});`,
+    `await p.goto(${JSON.stringify(url)},{waitUntil:'domcontentloaded',timeout:15000});`,
+    `await new Promise(r=>setTimeout(r,3000));`,
+    `process.stdout.write(await p.content());`,
+    `await b.close();`,
+    `})().catch(e=>{process.stderr.write(e.message);process.exit(1)});`,
+  ].join('')
+  const r = Bun.spawnSync(['node', '-e', script], {
+    stdout: 'pipe', stderr: 'pipe', timeout: 30_000,
+    cwd: projectRoot,
+    env: { ...process.env, NODE_PATH: join(projectRoot, 'node_modules') },
+  })
+  if (r.exitCode !== 0) throw new Error(`Browser fetch failed: ${new TextDecoder().decode(r.stderr).trim()}`)
+  return new TextDecoder().decode(r.stdout)
+}
+
 export const fetchOPEC = async (source: Source): Promise<FeedItem[]> => {
-  const res = await fetch(source.url, { headers: { 'User-Agent': UA } })
-  if (!res.ok) throw new Error(`OPEC: ${res.status}`)
-  const $ = cheerio.load(await res.text())
+  const html = fetchPage(source.url)
+  const $ = cheerio.load(html)
   const items: FeedItem[] = []
   const seen = new Set<string>()
 
-  // Each press release: heading + date text + "READ MORE" link to /pr-detail/
   $('a[href*="/pr-detail/"]').each((_, el) => {
-    const $a = $(el)
-    const href = $a.attr('href')
+    const href = $(el).attr('href')
     if (!href) return
-
-    // Title is in the closest parent block's heading
-    const $block = $a.closest('div').parent()
-    const title = $block.find('h2, h3, h4').first().text().trim()
-      || $a.closest('div').prevAll().find('h2, h3, h4').first().text().trim()
-    if (!title || title.length < 10) return
 
     const url = href.startsWith('http') ? href : `${BASE}${href}`
     if (seen.has(url)) return
     seen.add(url)
 
-    // Date: "4 March 2026 | Vienna, Austria"
-    const dateText = $block.text()
-    const dateMatch = dateText.match(/(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/)
+    // Title: walk up to find heading
+    let $block = $(el).parent()
+    let title = ''
+    for (let i = 0; i < 8 && !title; i++) {
+      title = $block.find('h2, h3, h4, h5').first().text().trim()
+      $block = $block.parent()
+    }
+    if (!title || title.length < 10) return
+
+    // Date from URL: /594-4-march-2026.html
+    const dateMatch = href.match(/(\d{1,2})-(\w+)-(\d{4})\.html/)
     let publishedAt: string | undefined
     if (dateMatch) {
-      publishedAt = new Date(`${dateMatch[2]} ${dateMatch[1]}, ${dateMatch[3]}`).toISOString()
+      try { publishedAt = new Date(`${dateMatch[2]} ${dateMatch[1]}, ${dateMatch[3]}`).toISOString() } catch {}
     }
 
     items.push(item(source, url, title, { publishedAt }))
