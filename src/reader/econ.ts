@@ -124,6 +124,18 @@ export const econRules: SiteRule[] = [
     cleanTitle: t => t.replace(/\s*\|\s*IAEA$/, '').trim(),
   },
   {
+    test: u => u.includes('ec.europa.eu/commission/presscorner'),
+    selector: '.ecl-editor',
+    title: 'h1',
+    cleanTitle: t => t.replace(/\s*\|\s*European Commission$/, '').trim(),
+  },
+  {
+    test: u => u.includes('ftc.gov'),
+    selector: '.node__content .field--name-body',
+    title: 'h1.node-title',
+    cleanTitle: t => t.replace(/\s*\|\s*(Federal Trade Commission|FTC)$/, '').trim(),
+  },
+  {
     test: u => u.includes('wto.org'),
     selector: '.centerCol',
     title: '.kickertext, h1',

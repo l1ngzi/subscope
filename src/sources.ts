@@ -96,4 +96,8 @@ export const SOURCE_REGISTRY: SourceDef[] = [
   S('https://www.who.int/rss-feeds/news-english.xml', 'intl/who'),
   S('https://www.iaea.org/newscenter/pressreleases', 'intl/iaea'),
   S('https://www.wto.org/english/news_e/news_e.htm', 'intl/wto'),
+
+  // ── Regulation ──
+  S('https://ec.europa.eu/commission/presscorner/home/en', 'reg/eu'),
+  S('https://www.ftc.gov/news-events/news/press-releases', 'reg/ftc'),
 ]

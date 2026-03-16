@@ -26,6 +26,8 @@ import { fetchBOJ } from './sites/boj.ts'
 import { fetchAPNews } from './sites/apnews.ts'
 import { fetchIAEA } from './sites/iaea.ts'
 import { fetchWTO } from './sites/wto.ts'
+import { fetchFTC } from './sites/ftc.ts'
+import { fetchEU } from './sites/eu.ts'
 import type { SourceAdapter, SourceType } from '../types.ts'
 
 // Site-specific adapters — matched by (hostname, pathPrefix)
@@ -56,6 +58,8 @@ const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[
   { host: 'apnews.com', fetch: fetchAPNews },
   { host: 'iaea.org', path: '/newscenter/', fetch: fetchIAEA },
   { host: 'wto.org', fetch: fetchWTO },
+  { host: 'ftc.gov', fetch: fetchFTC },
+  { host: 'ec.europa.eu', path: '/commission/presscorner/', fetch: fetchEU },
 ]
 
 const matchSite = (url: string): SourceAdapter['fetch'] | undefined => {

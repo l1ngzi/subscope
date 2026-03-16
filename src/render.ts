@@ -39,7 +39,8 @@ const BRAND: [string, number][] = [
   ['apnews', 255], ['focustaiwan', 39], ['thehindu', 208], ['boj', 231],
   ['iea', 214], ['eia', 107],
   ['un', 75], ['who', 39], ['iaea', 220], ['wto', 33],
-  ['eu', 33], ['ftc', 107],
+  ['eu', 33], ['ec.europa', 33],
+  ['ftc', 107], ['ftc.gov', 107],
 ]
 
 const sourceColor = (name: string, _type: string, group?: string): string => {
