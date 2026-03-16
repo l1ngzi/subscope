@@ -37,6 +37,9 @@ const BRAND: [string, number][] = [
   ['abc-au', 40], ['abc.net.au', 40],
   ['cbc', 160],
   ['apnews', 255], ['focustaiwan', 39], ['thehindu', 208], ['boj', 231],
+  ['iea', 214], ['eia', 107],
+  ['un', 75], ['who', 39], ['iaea', 220], ['wto', 33],
+  ['eu', 33], ['ftc', 107],
 ]
 
 const sourceColor = (name: string, _type: string, group?: string): string => {
@@ -52,6 +55,7 @@ const cols = () => process.stdout.columns || 80
 const rows = () => process.stdout.rows || 24
 
 const isWide = (cp: number): boolean =>
+  // CJK
   (cp >= 0x1100 && cp <= 0x115f) ||
   (cp >= 0x2e80 && cp <= 0xa4cf && cp !== 0x303f) ||
   (cp >= 0xac00 && cp <= 0xd7a3) ||
@@ -60,7 +64,12 @@ const isWide = (cp: number): boolean =>
   (cp >= 0xfe30 && cp <= 0xfe6b) ||
   (cp >= 0xff01 && cp <= 0xff60) ||
   (cp >= 0xffe0 && cp <= 0xffe6) ||
-  (cp >= 0x20000 && cp <= 0x3fffd)
+  (cp >= 0x20000 && cp <= 0x3fffd) ||
+  // Emoji (rendered as 2-cell wide in terminals)
+  (cp >= 0x231a && cp <= 0x23ff) ||
+  (cp >= 0x2600 && cp <= 0x27bf) ||
+  (cp >= 0x2b50 && cp <= 0x2b55) ||
+  (cp >= 0x1f000 && cp <= 0x1faff)
 
 const displayWidth = (s: string): number => {
   let w = 0
@@ -105,6 +114,10 @@ const DISPLAY: [string, string][] = [
   ['cbc.ca', 'CBC'],
   ['apnews.com', 'AP News'], ['focustaiwan.tw', 'Focus Taiwan'],
   ['thehindu.com', 'The Hindu'], ['boj.or.jp', 'BOJ'],
+  ['iea.org', 'IEA'], ['eia.gov', 'EIA'],
+  ['news.un.org', 'UN News'], ['who.int', 'WHO'],
+  ['iaea.org', 'IAEA'], ['wto.org', 'WTO'],
+  ['ec.europa.eu', 'EU Commission'], ['ftc.gov', 'FTC'],
 ]
 
 export const formatSourceName = (name: string): string => {
