@@ -4,20 +4,19 @@ import type { Source, FeedItem } from '../../types.ts'
 
 const BASE = 'http://www.news.cn'
 
-// Fetches both world and politics (china) pages in one adapter call (TLS reuse)
+// Fetches both world and politics (china) pages in parallel
 export const fetchXinhua = async (source: Source): Promise<FeedItem[]> => {
   const paths = ['/world/', '/politics/']
-  const items: FeedItem[] = []
   const seen = new Set<string>()
 
-  for (const path of paths) {
+  const parsePage = async (path: string): Promise<FeedItem[]> => {
     const url = `${BASE}${path}`
     try {
       const res = await fetch(url, { headers: { 'User-Agent': UA }, ...TLS(url) } as any)
-      if (!res.ok) continue
+      if (!res.ok) return []
       const $ = cheerio.load(await res.text())
+      const items: FeedItem[] = []
 
-      // Article URLs: news.cn/{channel}/YYYYMMDD/{hash}/c.html
       $('a[href*="news.cn/"]').each((_, el) => {
         const $a = $(el)
         const href = $a.attr('href')
@@ -30,7 +29,6 @@ export const fetchXinhua = async (source: Source): Promise<FeedItem[]> => {
         if (seen.has(articleUrl)) return
         seen.add(articleUrl)
 
-        // Date from URL: /20260316/
         const dateMatch = articleUrl.match(/\/(\d{4})(\d{2})(\d{2})\//)
         const publishedAt = dateMatch
           ? dateOnlyToISO(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!)
@@ -38,8 +36,10 @@ export const fetchXinhua = async (source: Source): Promise<FeedItem[]> => {
 
         items.push(item(source, articleUrl, title, { publishedAt }))
       })
-    } catch {}
+      return items
+    } catch { return [] }
   }
 
-  return sortDesc(items)
+  const results = await Promise.all(paths.map(parsePage))
+  return sortDesc(results.flat())
 }

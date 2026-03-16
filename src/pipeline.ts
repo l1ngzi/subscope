@@ -41,8 +41,8 @@ export const fetchAll = async (opts?: {
     try { const h = new URL(s.url).hostname; if (!seen.has(h)) { seen.add(h); Bun.dns.prefetch(h) } } catch {}
   }
 
-  // 12 concurrent workers — queue-based semaphore avoids DNS/TLS congestion
-  const CONCURRENCY = 12
+  // 20 concurrent workers — queue-based semaphore avoids DNS/TLS congestion
+  const CONCURRENCY = 20
   const queue = [...sources]
   const workers: Promise<void>[] = []
 

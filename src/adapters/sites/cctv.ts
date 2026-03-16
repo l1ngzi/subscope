@@ -11,28 +11,28 @@ interface CCTVItem {
   brief?: string
 }
 
-// Fetches both world and china channels in one adapter call (TLS reuse)
+// Fetches both world and china channels in parallel
 export const fetchCCTV = async (source: Source): Promise<FeedItem[]> => {
   const channels = ['world', 'china']
-  const items: FeedItem[] = []
 
-  for (const channel of channels) {
+  const parseChannel = async (channel: string): Promise<FeedItem[]> => {
     const jsonpUrl = `${JSONP_BASE}/${channel}_1.jsonp`
     const res = await fetch(jsonpUrl, { headers: { 'User-Agent': UA }, ...TLS(jsonpUrl) } as any)
-    if (!res.ok) continue
+    if (!res.ok) return []
 
     // JSONP response: callback({data:{list:[...]}})
     const text = await res.text()
     const jsonStr = text.replace(/^[^(]*\(/, '').replace(/\);?\s*$/, '')
     const json = JSON.parse(jsonStr) as { data: { list: CCTVItem[] } }
 
-    items.push(...json.data.list
+    return json.data.list
       .filter(n => (n.brief?.length ?? 0) >= 30)
       .map(n => item(source, n.url, n.title, {
         summary: n.brief?.slice(0, 200),
         publishedAt: n.focus_date ? new Date(n.focus_date + '+08:00').toISOString() : undefined,
-      })))
+      }))
   }
 
-  return sortDesc(items)
+  const results = await Promise.all(channels.map(parseChannel))
+  return sortDesc(results.flat())
 }

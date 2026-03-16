@@ -4,22 +4,19 @@ import type { Source, FeedItem } from '../../types.ts'
 
 const BASE = 'https://www.anthropic.com'
 
-// Fetches all three sections (blog, research, engineering) in one adapter call.
-// Sequential requests to the same host reuse the TLS connection (~7s vs ~20s).
+// Fetches all three sections (blog, research, engineering) in parallel.
 export const fetchAnthropic = async (source: Source): Promise<FeedItem[]> => {
-  const pages = ['/blog', '/research', '/engineering']
-  const items: FeedItem[] = []
+  const [blogHtml, researchHtml, engHtml] = await Promise.all([
+    fetch(`${BASE}/blog`).then(r => r.text()),
+    fetch(`${BASE}/research`).then(r => r.text()),
+    fetch(`${BASE}/engineering`).then(r => r.text()),
+  ])
 
-  for (const path of pages) {
-    const html = await fetch(`${BASE}${path}`).then(r => r.text())
-    if (path === '/engineering') {
-      items.push(...parseEngineering(html, source))
-    } else {
-      items.push(...parseRSC(html, source, path))
-    }
-  }
-
-  return sortDesc(items)
+  return sortDesc([
+    ...parseRSC(blogHtml, source, '/blog'),
+    ...parseRSC(researchHtml, source, '/research'),
+    ...parseEngineering(engHtml, source),
+  ])
 }
 
 // /blog, /research: data lives in RSC JSON payload
