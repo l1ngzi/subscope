@@ -24,6 +24,7 @@ import { fetchCCTV } from './sites/cctv.ts'
 import { fetchXinhua } from './sites/xinhua.ts'
 import { fetchBOJ } from './sites/boj.ts'
 import { fetchAPNews } from './sites/apnews.ts'
+import { fetchEIA } from './sites/eia.ts'
 import { fetchIAEA } from './sites/iaea.ts'
 import { fetchWTO } from './sites/wto.ts'
 import { fetchFTC } from './sites/ftc.ts'
@@ -58,6 +59,7 @@ const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[
   { host: 'news.cn', fetch: fetchXinhua },
   { host: 'boj.or.jp', fetch: fetchBOJ },
   { host: 'apnews.com', fetch: fetchAPNews },
+  { host: 'eia.gov', fetch: fetchEIA },
   { host: 'iaea.org', path: '/newscenter/', fetch: fetchIAEA },
   { host: 'wto.org', fetch: fetchWTO },
   { host: 'ftc.gov', fetch: fetchFTC },
