@@ -21,7 +21,7 @@ export interface FetchResult {
 
 export const fetchAll = async (opts?: {
   group?: string
-  onProgress?: (done: number, total: number) => void
+  onResult?: (result: FetchResult, done: number, total: number) => void
 }): Promise<{ newItems: number; results: FetchResult[] }> => {
   const config = load()
   const store = createStore()
@@ -30,33 +30,26 @@ export const fetchAll = async (opts?: {
     : config.sources
 
   let done = 0
-  const settled = await Promise.allSettled(
-    sources.map(async (source) => {
-      const adapter = resolve(source.url)
-      try {
-        const items = await adapter.fetch(source)
-        return { source, items, error: undefined as string | undefined }
-      } catch (e: any) {
-        return { source, items: [] as FeedItem[], error: e?.message ?? String(e) }
-      } finally {
-        done++
-        opts?.onProgress?.(done, sources.length)
-      }
-    })
-  )
-
   const results: FetchResult[] = []
   let newItems = 0
-  for (const r of settled) {
-    const { source, items, error } = (r as PromiseFulfilledResult<any>).value
-    if (error) {
-      results.push({ name: source.name, count: 0, added: 0, error })
-    } else {
-      const added = store.save(items)
-      newItems += added
-      results.push({ name: source.name, count: items.length, added })
-    }
-  }
+
+  await Promise.allSettled(
+    sources.map(async (source) => {
+      const adapter = resolve(source.url)
+      let result: FetchResult
+      try {
+        const items = await adapter.fetch(source)
+        const added = store.save(items)
+        newItems += added
+        result = { name: source.name, count: items.length, added }
+      } catch (e: any) {
+        result = { name: source.name, count: 0, added: 0, error: e?.message ?? String(e) }
+      }
+      results.push(result)
+      done++
+      opts?.onResult?.(result, done, sources.length)
+    })
+  )
 
   store.close()
   return { newItems, results }

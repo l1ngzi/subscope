@@ -59,35 +59,25 @@ const commands: Record<string, () => Promise<void>> = {
     const silent = args.includes('--notify')
 
     const start = Date.now()
-    const spin = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
-    let frame = 0, lastDone = 0, lastTotal = 0
 
-    const timer = silent ? null : setInterval(() => {
-      frame = (frame + 1) % spin.length
-      const msg = lastTotal > 0 ? `${lastDone}/${lastTotal} sources` : 'connecting...'
-      process.stdout.write(`\r  ${spin[frame]} ${msg}`)
-    }, 80)
-
+    if (!silent) console.log()
     const { newItems, results } = await fetchAll({
       group,
-      onProgress: (done, total) => { lastDone = done; lastTotal = total },
+      onResult: silent ? undefined : (r, done, total) => {
+        if (r.error) {
+          console.log(`  \x1b[31m✗\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.error}\x1b[0m`)
+        } else {
+          const tag = r.added > 0 ? ` \x1b[32m(${r.added} new)\x1b[0m` : ''
+          console.log(`  \x1b[90m${done}/${total}\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.count}\x1b[0m${tag}`)
+        }
+      },
     })
 
-    if (timer) clearInterval(timer)
     const elapsed = ((Date.now() - start) / 1000).toFixed(1)
 
     if (silent) {
       if (newItems > 0) notify('subscope', `${newItems} new item${newItems > 1 ? 's' : ''}`)
     } else {
-      process.stdout.write('\r\x1b[K')
-      for (const r of results) {
-        if (r.error) {
-          console.log(`  \x1b[31m✗\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.error}\x1b[0m`)
-        } else {
-          const tag = r.added > 0 ? ` \x1b[32m(${r.added} new)\x1b[0m` : ''
-          console.log(`  \x1b[90m·\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.count} items\x1b[0m${tag}`)
-        }
-      }
       console.log(`\n  \x1b[1m${results.length} sources · ${elapsed}s · ${newItems} new\x1b[0m\n`)
     }
   },
