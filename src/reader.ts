@@ -89,6 +89,30 @@ const SITES: SiteRule[] = [
     title: 'h1, title',
     cleanTitle: t => t.replace(/\s*[-–]\s*IMF$/, '').trim(),
   },
+  {
+    test: u => u.includes('csrc.gov.cn'),
+    selector: '.main-right, .detail-content',
+    title: 'title',
+    cleanTitle: t => t.replace(/\s*[-–—_]\s*中国证券监督管理委员会.*$/, '').trim(),
+  },
+  {
+    test: u => u.includes('mof.gov.cn'),
+    selector: '.xwfb_content, .TRS_Editor, .pages_content',
+    title: 'title',
+    cleanTitle: t => t.replace(/\s*[-–—_]\s*中华人民共和国财政部.*$/, '').trim(),
+  },
+  {
+    test: u => u.includes('safe.gov.cn'),
+    selector: '.detail_content, .Custom_UnionStyle',
+    title: 'title',
+    cleanTitle: t => t.replace(/\s*[-–—_]\s*国家外汇管理局.*$/, '').trim(),
+  },
+  {
+    test: u => u.includes('nfra.gov.cn'),
+    selector: '.Section0, .content, article',
+    title: 'title',
+    cleanTitle: t => t.replace(/\s*[-–—_]\s*国家金融监督管理总局.*$/, '').trim(),
+  },
   // ── AI companies ──
   {
     test: u => u.includes('anthropic.com'),

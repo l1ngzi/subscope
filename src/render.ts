@@ -30,6 +30,7 @@ const BRAND: [string, number][] = [
   ['sec', 27], ['edgar', 27],
   ['bls', 107], ['bea', 107],
   ['ecb', 33], ['treasury', 220], ['imf', 75],
+  ['mof', 172], ['safe', 75], ['nfra', 214], ['csrc', 196],
 ]
 
 const sourceColor = (name: string, _type: string, group?: string): string => {
@@ -57,6 +58,9 @@ const DISPLAY: [string, string][] = [
   ['efts.sec.gov', 'SEC EDGAR'], ['sec.gov', 'SEC EDGAR'],
   ['bls.gov', 'BLS'], ['bea.gov', 'BEA'], ['ecb.europa', 'ECB'],
   ['treasury.gov', 'US Treasury'], ['imf.org', 'IMF'],
+  ['mof.gov.cn', '\u8d22\u653f\u90e8'], ['safe.gov.cn', '\u5916\u6c47\u7ba1\u7406\u5c40'],
+  ['nfra.gov.cn', '\u91d1\u878d\u76d1\u7ba1\u603b\u5c40'],
+  ['csrc.gov.cn', '\u8bc1\u76d1\u4f1a'],
 ]
 
 const formatSourceName = (name: string): string => {

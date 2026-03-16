@@ -14,6 +14,10 @@ import { fetchBEA } from './sites/bea.ts'
 import { fetchBLS } from './sites/bls.ts'
 import { fetchTreasury } from './sites/treasury.ts'
 import { fetchIMF } from './sites/imf.ts'
+import { fetchMOF } from './sites/mof.ts'
+import { fetchSAFE } from './sites/safe.ts'
+import { fetchNFRA } from './sites/nfra.ts'
+import { fetchCSRC } from './sites/csrc.ts'
 import type { SourceAdapter, SourceType } from '../types.ts'
 
 // Site-specific adapters — matched by (hostname, pathPrefix)
@@ -32,6 +36,10 @@ const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[
   { host: 'bls.gov', fetch: fetchBLS },
   { host: 'home.treasury.gov', fetch: fetchTreasury },
   { host: 'imf.org', fetch: fetchIMF },
+  { host: 'mof.gov.cn', fetch: fetchMOF },
+  { host: 'safe.gov.cn', fetch: fetchSAFE },
+  { host: 'nfra.gov.cn', fetch: fetchNFRA },
+  { host: 'csrc.gov.cn', fetch: fetchCSRC },
 ]
 
 const matchSite = (url: string): SourceAdapter['fetch'] | undefined => {
