@@ -4,9 +4,9 @@ A super subscription that merges multiple first-hand sources into one terminal f
 
 ## What it does
 
-First-hand information from official sources only — no intermediaries, no aggregators, no SEO-polluted search results. Six intelligence dimensions: AI companies, central banks & financial regulators, global official media, energy agencies, and international organizations.
+First-hand information from official sources only — no intermediaries, no aggregators, no SEO-polluted search results. Five dimensions: AI companies, central banks & financial regulators, global official media, energy agencies, and international organizations.
 
-58 sources across 6 dimensions: AI (Anthropic, Claude, OpenAI, DeepMind, DeepSeek, xAI), economics (Fed, ECB, PBOC, BOJ, NBS, BLS, BEA, SEC, Treasury, IMF, CSRC, MOF, SAFE, NFRA), global news (BBC, France24, DW, NHK, Al Jazeera, TASS, Yonhap, AP, ABC Australia, CBC, CCTV, Xinhua, People's Daily, Focus Taiwan, The Hindu), energy (IEA, EIA), international orgs (UN, WHO, IAEA, WTO). All sources hardcoded in `src/sources.ts`.
+58 sources across 5 groups: AI (Anthropic, Claude, OpenAI, DeepMind, DeepSeek, xAI), economics (Fed, ECB, PBOC, BOJ, NBS, BLS, BEA, SEC, Treasury, IMF, CSRC, MOF, SAFE, NFRA), global news (BBC, France24, DW, NHK, Al Jazeera, TASS, Yonhap, AP, ABC Australia, CBC, CCTV, Xinhua, People's Daily, Focus Taiwan, The Hindu), energy (IEA, EIA), international orgs (UN, WHO, IAEA, WTO). All sources hardcoded in `src/sources.ts`.
 
 ## Quick start
 
