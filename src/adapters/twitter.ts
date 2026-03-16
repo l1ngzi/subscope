@@ -1,13 +1,81 @@
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { parse } from 'yaml'
-import { hash, item, sortDesc, DIR } from '../lib.ts'
+import { hash, item, sortDesc, DIR, UA } from '../lib.ts'
 import type { Source, FeedItem, SourceAdapter } from '../types.ts'
 
 const AUTH_FILE = join(DIR, 'auth.yml')
 const UID_CACHE_FILE = join(DIR, 'x-uid-cache.json')
 
-// X web app's public bearer token (baked into their JS, never changes)
+export const twitter: SourceAdapter = {
+  type: 'twitter',
+  test: (url: string) => {
+    const { hostname } = new URL(url)
+    return hostname.includes('twitter.com') || hostname.includes('x.com')
+  },
+
+  async fetch(source: Source): Promise<FeedItem[]> {
+    const username = source.url.match(/(?:x\.com|twitter\.com)\/?@?([\w]+)/)?.[1]
+    if (!username) return []
+
+    // Primary: syndication API (no auth, fast)
+    try {
+      const tweets = await fetchViaSyndication(username)
+      if (tweets.length > 0) return mergeThreads(tweets, username, source)
+    } catch {}
+
+    // Fallback: GraphQL API (requires auth_token)
+    const session = await getSession()
+    let userId = getCachedUid(username)
+    if (!userId) {
+      userId = await resolveUserId(session, username)
+      if (!userId) throw new Error(`X: user "${username}" not found`)
+      cacheUid(username, userId)
+    }
+    return mergeThreads(await fetchUserTweets(session, userId), username, source)
+  },
+}
+
+// ── Primary: Syndication (public, no auth) ──
+
+const SYND_BASE = 'https://syndication.twitter.com/srv/timeline-profile/screen-name/'
+
+const fetchViaSyndication = async (username: string): Promise<RawTweet[]> => {
+  const res = await fetch(`${SYND_BASE}${username}`, {
+    headers: { 'User-Agent': UA },
+    signal: AbortSignal.timeout(8000),
+    tls: { rejectUnauthorized: false },
+  } as any)
+  if (!res.ok) throw new Error(`Syndication: ${res.status}`)
+  const html = await res.text()
+
+  // Extract __NEXT_DATA__ JSON from the Next.js page
+  const idx = html.indexOf('__NEXT_DATA__')
+  if (idx < 0) throw new Error('No __NEXT_DATA__')
+  const start = html.indexOf('>', idx) + 1
+  const end = html.indexOf('</script>', start)
+  const data = JSON.parse(html.slice(start, end)) as any
+
+  const entries: any[] = data?.props?.pageProps?.timeline?.entries ?? []
+  const tweets: RawTweet[] = []
+
+  for (const entry of entries) {
+    const t = entry?.content?.tweet
+    if (!t?.id_str || !t?.full_text) continue
+    tweets.push({
+      id: t.id_str,
+      text: t.full_text,
+      date: t.created_at ?? '',
+      convId: t.conversation_id_str ?? t.id_str,
+      replyToId: t.in_reply_to_status_id_str ?? null,
+    })
+  }
+
+  return tweets
+}
+
+// ── Fallback: GraphQL (requires auth_token) ──
+
 const BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA'
 
 const FEATURES = JSON.stringify({
@@ -37,33 +105,7 @@ const FEATURES = JSON.stringify({
 })
 
 // Session cache — CSRF token reused across all X sources in one fetch cycle
-// Promise-based mutex: concurrent callers await the same in-flight request
 let sessionPromise: Promise<{ ct0: string; authToken: string }> | null = null
-
-export const twitter: SourceAdapter = {
-  type: 'twitter',
-  test: (url: string) => {
-    const { hostname } = new URL(url)
-    return hostname.includes('twitter.com') || hostname.includes('x.com')
-  },
-
-  async fetch(source: Source): Promise<FeedItem[]> {
-    const username = source.url.match(/(?:x\.com|twitter\.com)\/?@?([\w]+)/)?.[1]
-    if (!username) return []
-
-    const session = await getSession()
-    let userId = getCachedUid(username)
-    if (!userId) {
-      userId = await resolveUserId(session, username)
-      if (!userId) throw new Error(`X: user "${username}" not found`)
-      cacheUid(username, userId)
-    }
-
-    return mergeThreads(await fetchUserTweets(session, userId), username, source)
-  },
-}
-
-// ── Session ──
 
 const getSession = () => {
   if (sessionPromise) return sessionPromise
@@ -91,20 +133,16 @@ const getSession = () => {
   return sessionPromise
 }
 
-// ── User ID cache (IDs are permanent, never change) ──
-
+// User ID cache (IDs are permanent)
 let uidCache: Record<string, string> | null = null
 
 const loadUidCache = (): Record<string, string> => {
   if (uidCache) return uidCache
   try {
-    if (existsSync(UID_CACHE_FILE)) {
-      uidCache = JSON.parse(readFileSync(UID_CACHE_FILE, 'utf-8'))
-      return uidCache!
-    }
+    if (existsSync(UID_CACHE_FILE))
+      return (uidCache = JSON.parse(readFileSync(UID_CACHE_FILE, 'utf-8')))
   } catch {}
-  uidCache = {}
-  return uidCache
+  return (uidCache = {})
 }
 
 const getCachedUid = (username: string): string | null =>
@@ -121,8 +159,6 @@ const apiHeaders = (s: { ct0: string; authToken: string }) => ({
   'X-Csrf-Token': s.ct0,
   Cookie: `auth_token=${s.authToken}; ct0=${s.ct0}`,
 })
-
-// ── GraphQL ──
 
 const resolveUserId = async (session: { ct0: string; authToken: string }, username: string): Promise<string | null> => {
   const variables = JSON.stringify({ screen_name: username })
@@ -141,7 +177,7 @@ const resolveUserId = async (session: { ct0: string; authToken: string }, userna
 
 const fetchUserTweets = async (session: { ct0: string; authToken: string }, userId: string): Promise<RawTweet[]> => {
   const variables = JSON.stringify({
-    userId, count: 40, // X API max per page
+    userId, count: 40,
     includePromotedContent: false,
     withQuickPromoteEligibilityTweetFields: false,
     withVoice: false, withV2Timeline: true,
@@ -188,8 +224,6 @@ const mergeThreads = (tweets: RawTweet[], username: string, source: Source): Fee
 
   for (const tweet of byId.values()) {
     if (assigned.has(tweet.id)) continue
-
-    // Walk reply chain to find root
     let rootId = tweet.id
     let current = tweet
     while (current.replyToId && byId.has(current.replyToId)) {
@@ -197,7 +231,6 @@ const mergeThreads = (tweets: RawTweet[], username: string, source: Source): Fee
       current = byId.get(current.replyToId)!
     }
     if (byId.has(tweet.convId)) rootId = tweet.convId
-
     const group = threadMap.get(rootId) ?? []
     group.push(tweet)
     assigned.add(tweet.id)
