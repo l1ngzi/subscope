@@ -12,13 +12,16 @@ export interface ReadOpts {
   mode?: string
 }
 
-export const fetchAll = async (): Promise<number> => {
+export const fetchAll = async (opts?: { group?: string }): Promise<number> => {
   const config = load()
   const store = createStore()
+  const sources = opts?.group
+    ? config.sources.filter(s => s.active !== false && (s.group === opts.group || s.group.startsWith(opts.group + '/')))
+    : config.sources
 
-  // Fetch all sources concurrently — result carries its own source reference
+  // Fetch sources concurrently — result carries its own source reference
   const results = await Promise.allSettled(
-    config.sources.map(async (source) => {
+    sources.map(async (source) => {
       const adapter = resolve(source.url)
       const items = await adapter.fetch(source)
       return { source, items }

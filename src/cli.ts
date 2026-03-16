@@ -99,9 +99,12 @@ const commands: Record<string, () => Promise<void>> = {
       console.log('\n  No sources to fetch. Add one with: subscope add <url>\n')
       return
     }
+    let group: string | undefined
+    for (let i = 0; i < args.length; i++)
+      if ((args[i] === '-g' || args[i] === '--group') && args[i + 1]) group = args[++i]!
     const silent = args.includes('--notify')
     if (!silent) console.log('\n  Fetching...\n')
-    const newItems = await fetchAll()
+    const newItems = await fetchAll({ group })
     if (silent) {
       if (newItems > 0) notify('subscope', `${newItems} new item${newItems > 1 ? 's' : ''}`)
     } else {
