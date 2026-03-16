@@ -1,11 +1,10 @@
 import { Database } from 'bun:sqlite'
 import { join } from 'path'
-import { homedir } from 'os'
 import { mkdirSync, existsSync } from 'fs'
+import { DIR } from './lib.ts'
 import type { FeedItem, SourceType } from './types.ts'
 
-const SUBSCOPE_DIR = join(homedir(), '.subscope')
-const DB_PATH = join(SUBSCOPE_DIR, 'subscope.db')
+const DB_PATH = join(DIR, 'subscope.db')
 
 export interface QueryOpts {
   limit?: number
@@ -102,7 +101,7 @@ export const createStore = (dbPath = DB_PATH) => {
     },
 
     removeBySource(sourceId: string) {
-      db.run('DELETE FROM items WHERE sourceId = ?', sourceId)
+      db.run('DELETE FROM items WHERE sourceId = ?', [sourceId])
     },
 
     close() {

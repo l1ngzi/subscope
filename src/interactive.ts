@@ -1,5 +1,5 @@
 import { load, save, type Config } from './config.ts'
-import { createHash } from 'crypto'
+import { sourceId } from './lib.ts'
 import type { Source, SourceType } from './types.ts'
 
 // ── ANSI ──
@@ -208,10 +208,11 @@ export const interactiveConfig = (): Promise<void> => {
       lines.push(`  ${D}Search:${R} ${Y}${mode.search}\u2588${R}`)
       lines.push('')
       const existing = new Set(cfg.sources.map(s => s.url))
+      const search = mode.search
       const filtered = CATALOG.filter(e => {
         if (e.url && existing.has(e.url)) return false
-        if (!mode.search) return true
-        return e.label.toLowerCase().includes(mode.search.toLowerCase())
+        if (!search) return true
+        return e.label.toLowerCase().includes(search.toLowerCase())
       })
       for (let i = 0; i < filtered.length; i++) {
         const e = filtered[i]!
@@ -363,44 +364,45 @@ export const interactiveConfig = (): Promise<void> => {
 
       // ── TEXT INPUT ──
       if (mode.kind === 'text') {
+        const m = mode
         if (enter) {
-          const val = mode.buf.trim()
+          const val = m.buf.trim()
           if (val) {
-            if (mode.purpose === 'new-folder') {
+            if (m.purpose === 'new-folder') {
               const p = cur().path ? `${cur().path}/${val}` : val
               if (!cfg.folders.includes(p)) cfg.folders.push(p)
               if (!cfg.activeGroups.includes(p)) cfg.activeGroups.push(p)
               dirty = true
-            } else if (mode.purpose === 'rename-folder') {
-              const oldPath = mode.meta as string
+            } else if (m.purpose === 'rename-folder') {
+              const oldPath = m.meta as string
               const newPath = cur().path ? `${cur().path}/${val}` : val
               const rn = (p: string) => p === oldPath ? newPath : p.startsWith(oldPath + '/') ? newPath + p.slice(oldPath.length) : p
               cfg.folders = cfg.folders.map(rn)
               cfg.activeGroups = cfg.activeGroups.map(rn)
               cfg.sources.forEach(s => { s.group = rn(s.group) })
               dirty = true
-            } else if (mode.purpose === 'add-handle' && mode.meta?.entry) {
+            } else if (m.purpose === 'add-handle' && m.meta?.entry) {
               const handle = val.replace(/^@/, '')
-              const url = mode.meta.entry.template.replace('{handle}', handle)
+              const url = m.meta.entry.template.replace('{handle}', handle)
               const group = cur().path || 'ungrouped'
-              const src = mkSource(mode.meta.entry, url, group)
+              const src = mkSource(m.meta.entry, url, group)
               if (!cfg.sources.some(s => s.url === src.url)) { cfg.sources.push(src); dirty = true }
-            } else if (mode.purpose === 'add-handle' && mode.meta?.editId) {
-              const src = cfg.sources.find(s => s.id === mode.meta.editId)
+            } else if (m.purpose === 'add-handle' && m.meta?.editId) {
+              const src = cfg.sources.find(s => s.id === m.meta.editId)
               if (src) { src.name = val; dirty = true }
             }
           }
-          mode = mode.purpose === 'new-folder' || mode.purpose === 'rename-folder'
+          mode = m.purpose === 'new-folder' || m.purpose === 'rename-folder'
             ? { kind: 'folders' } : { kind: 'sources', cursor: 0 }
           draw(); return
         }
-        if (key === 'q' && mode.buf === '' || ctrlc) {
-          mode = mode.purpose === 'new-folder' || mode.purpose === 'rename-folder'
+        if (key === 'q' && m.buf === '' || ctrlc) {
+          mode = m.purpose === 'new-folder' || m.purpose === 'rename-folder'
             ? { kind: 'folders' } : { kind: 'sources', cursor: 0 }
           draw(); return
         }
-        if (backspace) { mode.buf = mode.buf.slice(0, -1); draw(); return }
-        if (printable) { mode.buf += key; draw(); return }
+        if (backspace) { m.buf = m.buf.slice(0, -1); draw(); return }
+        if (printable) { m.buf += key; draw(); return }
         return
       }
     }
@@ -414,7 +416,7 @@ const mkSource = (entry: CatalogEntry, url: string, group: string): Source => {
   const host = parsed.hostname.replace('www.', '')
   const path = parsed.pathname.replace(/\/+$/, '')
   return {
-    id: createHash('sha256').update(url).digest('hex').slice(0, 8),
+    id: sourceId(url),
     url, type: entry.type, group, active: true,
     name: path && path !== '/' ? `${host}${path}` : host,
     addedAt: new Date().toISOString(),

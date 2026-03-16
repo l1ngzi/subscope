@@ -1,19 +1,19 @@
 import { parse, stringify } from 'yaml'
 import { join } from 'path'
-import { homedir } from 'os'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs'
+import { DIR } from './lib.ts'
 import type { Source } from './types.ts'
 
 export type ModeName = 'formal' | 'quick' | string
 
 export interface ModeConfig {
-  types?: string[]   // source types to include
-  groups?: string[]  // source group prefixes to include
+  types?: string[]
+  groups?: string[]
 }
 
 export interface Config {
   activeGroups: string[]
-  folders: string[]      // all created folder paths (persists even when empty/inactive)
+  folders: string[]
   defaultMode: ModeName
   modes: Record<string, ModeConfig>
   sources: Source[]
@@ -25,11 +25,10 @@ const DEFAULT_MODES: Record<string, ModeConfig> = {
   eco: { groups: ['econ'] },
 }
 
-const SUBSCOPE_DIR = join(homedir(), '.subscope')
-const CONFIG_FILE = join(SUBSCOPE_DIR, 'config.yml')
+const CONFIG_FILE = join(DIR, 'config.yml')
 
 const ensureDir = () => {
-  if (!existsSync(SUBSCOPE_DIR)) mkdirSync(SUBSCOPE_DIR, { recursive: true })
+  if (!existsSync(DIR)) mkdirSync(DIR, { recursive: true })
 }
 
 export const load = (): Config => {

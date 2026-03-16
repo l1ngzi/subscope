@@ -1,36 +1,30 @@
 import * as cheerio from 'cheerio'
-import { createHash } from 'crypto'
+import { hash, item, TLS } from '../lib.ts'
 import type { Source, FeedItem, SourceAdapter } from '../types.ts'
-
-const hash = (...parts: string[]) =>
-  createHash('sha256').update(parts.join(':')).digest('hex').slice(0, 12)
 
 export const website: SourceAdapter = {
   type: 'website',
   test: () => true,
 
   async fetch(source: Source): Promise<FeedItem[]> {
-    const res = await globalThis.fetch(source.url, { tls: { rejectUnauthorized: false } } as any)
+    const res = await globalThis.fetch(source.url, TLS as any)
     const text = await res.text()
     const contentType = res.headers.get('content-type') ?? ''
 
-    // If the URL itself is an RSS/Atom feed, parse directly
     const isXml = contentType.includes('xml') || contentType.includes('rss') || contentType.includes('atom')
     const looksLikeFeed = text.trimStart().startsWith('<?xml') || text.trimStart().startsWith('<rss') || text.trimStart().startsWith('<feed')
 
-    if (isXml || looksLikeFeed) {
-      return parseFeed(text, source)
-    }
+    if (isXml || looksLikeFeed) return parseFeed(text, source)
 
     const $ = cheerio.load(text)
-
     const feedUrl =
       $('link[type="application/rss+xml"]').attr('href') ??
       $('link[type="application/atom+xml"]').attr('href')
 
     if (feedUrl) {
       const resolved = new URL(feedUrl, source.url).href
-      return fetchFeed(resolved, source)
+      const xml = await globalThis.fetch(resolved, TLS as any).then(r => r.text())
+      return parseFeed(xml, source)
     }
 
     return scrapeHTML($, source)
@@ -39,36 +33,21 @@ export const website: SourceAdapter = {
 
 const parseFeed = (xml: string, source: Source): FeedItem[] => {
   const $ = cheerio.load(xml, { xml: true })
-  return $('item, entry')
-    .map((_, el) => {
-      const title = $(el).find('title').first().text().trim()
-      const link =
-        $(el).find('link').attr('href') ?? $(el).find('link').first().text().trim()
-      const summary = $(el).find('description, summary').first().text().trim().slice(0, 200)
-      const date = ($(el).find('pubDate, published, updated').first().text().trim()
-        || $(el).find('dc\\:date').first().text().trim()
-        || $(el).find('date').first().text().trim())
+  return $('item, entry').map((_, el) => {
+    const title = $(el).find('title').first().text().trim()
+    const link = $(el).find('link').attr('href') ?? $(el).find('link').first().text().trim()
+    if (!title || !link) return null
 
-      if (!title || !link) return null
+    const summary = $(el).find('description, summary').first().text().trim().slice(0, 200)
+    const date = $(el).find('pubDate, published, updated').first().text().trim()
+      || $(el).find('dc\\:date').first().text().trim()
+      || $(el).find('date').first().text().trim()
 
-      return {
-        id: hash(source.id, link),
-        sourceId: source.id,
-        sourceType: source.type,
-        sourceName: source.name,
-        title,
-        url: link,
-        summary: summary || undefined,
-        publishedAt: date ? new Date(date).toISOString() : new Date().toISOString(),
-      } satisfies FeedItem
+    return item(source, link, title, {
+      summary: summary || undefined,
+      publishedAt: date ? new Date(date).toISOString() : undefined,
     })
-    .get()
-    .filter(Boolean) as FeedItem[]
-}
-
-const fetchFeed = async (feedUrl: string, source: Source): Promise<FeedItem[]> => {
-  const xml = await globalThis.fetch(feedUrl, { tls: { rejectUnauthorized: false } } as any).then(r => r.text())
-  return parseFeed(xml, source)
+  }).get().filter(Boolean) as FeedItem[]
 }
 
 const scrapeHTML = ($: cheerio.CheerioAPI, source: Source): FeedItem[] => {
@@ -85,26 +64,12 @@ const scrapeHTML = ($: cheerio.CheerioAPI, source: Source): FeedItem[] => {
     if (title.length < 10) return
 
     let url: string
-    try {
-      url = new URL(href, baseUrl).href
-    } catch {
-      return
-    }
-
+    try { url = new URL(href, baseUrl).href } catch { return }
     if (new URL(url).hostname !== baseUrl.hostname) return
-    if (url === source.url) return
-    if (seen.has(url)) return
+    if (url === source.url || seen.has(url)) return
     seen.add(url)
 
-    items.push({
-      id: hash(source.id, url),
-      sourceId: source.id,
-      sourceType: 'website',
-      sourceName: source.name,
-      title,
-      url,
-      publishedAt: new Date().toISOString(),
-    })
+    items.push(item(source, url, title))
   })
 
   return items
