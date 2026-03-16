@@ -57,7 +57,7 @@ Output: `[{"title":"...","source":"央视网","url":"...","summary":"...","publi
 ## Fetching
 
 ```
-subscope fetch                    pull all sources (12 concurrent workers)
+subscope fetch                    pull all sources (20 concurrent workers)
 subscope fetch -g <group>         fetch only matching group
 subscope fetch --notify           silent mode, sends Windows toast if new items found
 ```

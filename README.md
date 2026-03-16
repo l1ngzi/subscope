@@ -96,7 +96,7 @@ Generic adapters: RSS/Atom feeds (auto-detect XML), HTML scraping (link extracti
 
 X/Twitter calls the same GraphQL endpoints the web app uses. Thread merging via conversation_id. No Playwright, no syndication, no paid API.
 
-Sources fetch with 12 concurrent workers (avoids DNS/TLS congestion). Each source streams to terminal as it completes with per-source timing. Failed sources retried up to 3 times. Individual failures don't block others.
+Sources fetch with 20 concurrent workers. Multi-page adapters (Anthropic, CCTV, Xinhua) fetch their pages in parallel. Each source streams to terminal as it completes with per-source timing. Failed sources retried up to 3 times. Individual failures don't block others.
 
 ## Groups
 

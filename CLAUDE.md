@@ -10,7 +10,7 @@ subscope is a personal CLI intelligence feed. It pulls first-hand information fr
 
 - Pure raw information, no AI processing in the feed pipeline
 - Each source gets the best possible adapter, not a generic one
-- Fast: 58 sources fetch with 12 concurrent workers in ~3 seconds
+- Fast: 58 sources fetch with 20 concurrent workers in ~13 seconds
 - Playwright as optional fallback for anti-bot sites (BLS, IMF) and Angular SPAs (NFRA), not in the hot path
 - Code should read like it was written by someone who cares
 
@@ -123,7 +123,7 @@ Group tweets by `conversation_id_str`. Walk `in_reply_to_status_id_str` chain fo
 
 ## Data flow
 
-1. `subscope fetch`: load config -> resolve adapters -> 12 concurrent workers fetch sources -> retry up to 3x on failure -> store.save (INSERT OR IGNORE) -> stream results to terminal with per-source timing
+1. `subscope fetch`: load config -> resolve adapters -> 20 concurrent workers fetch sources -> retry up to 3x on failure -> store.save (INSERT OR IGNORE) -> stream results to terminal with per-source timing
 2. `subscope` (read): load config -> activeSources (filter by mode + group) -> store.query (filter by sourceId, since) -> render
 
 ## Config location
@@ -153,7 +153,7 @@ If the site has RSS or standard HTML, the generic website adapter handles it aut
 - Dates: `timeAgo()` for display, ISO strings for storage. `dateOnlyToISO()` converts date-from-URL to noon local time (capped at now) for sources without precise timestamps (CCTV uses JSONP with precise times instead).
 - CJK display: `truncate()` in render.ts uses `displayWidth()` to account for double-width CJK characters in terminal output
 - Dedup: hash-based IDs, `INSERT OR IGNORE` in SQLite
-- Error handling: adapters throw on auth issues, return `[]` on parse failures. Pipeline retries each source up to 3 times (`retry()` in lib.ts) with backoff. 12 concurrent workers via queue-based semaphore (avoids DNS/TLS congestion from 50+ simultaneous connections). Individual failures don't block others.
+- Error handling: adapters throw on auth issues, return `[]` on parse failures. Pipeline retries each source up to 3 times (`retry()` in lib.ts) with backoff. 20 concurrent workers via queue-based semaphore (avoids DNS/TLS congestion from 50+ simultaneous connections). Individual failures don't block others.
 - Text cleanup: `cleanTweetText()` strips t.co links. `cleanText()` strips HTML tags and collapses whitespace.
 - TLS: all fetch calls use `tls: { rejectUnauthorized: false }` (Bun-specific) to handle proxy/cert issues with government sites.
 - Anti-bot: BLS requires full `Sec-Fetch-*` browser headers. SEC EDGAR requires declared User-Agent. BLS/IMF article pages use Playwright with system Chrome as fallback. CSRC uses UCAP CMS JSON API to bypass TLS fingerprinting. NFRA Angular SPA auto-detected (`{{data.` + `ng-controller`) and retried with Playwright `networkidle`.
