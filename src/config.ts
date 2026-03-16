@@ -22,7 +22,7 @@ export interface Config {
 }
 
 const DEFAULT_MODES: Record<string, ModeConfig> = {
-  formal: { types: ['website'], groups: ['ai', 'photonics'] },
+  formal: { types: ['website'], groups: ['ai'] },
   quick: { types: ['youtube', 'twitter'] },
   eco: { groups: ['econ'] },
   glob: { groups: ['news'] },

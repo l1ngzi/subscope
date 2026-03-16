@@ -46,10 +46,6 @@ export const SOURCE_REGISTRY: SourceDef[] = [
   S('https://x.ai/news', 'ai/xai'),
   S('https://x.com/xai', 'ai/xai', 'twitter'),
 
-  // ── Photonics ──
-  S('https://www.nature.com/nphoton.rss', 'photonics'),
-  S('https://www.nature.com/lsa.rss', 'photonics'),
-
   // ── Economics / Central Banks ──
   S('https://www.federalreserve.gov/feeds/press_monetary.xml', 'econ/fed'),
   S('https://www.ecb.europa.eu/rss/press.html', 'econ/ecb'),
