@@ -107,8 +107,8 @@ export const econRules: SiteRule[] = [
   },
   {
     test: u => u.includes('eia.gov'),
-    selector: '.l-body-wrapper',
-    title: 'title',
+    selector: '.tie-article',
+    title: '.tie-article h2, title',
     cleanTitle: t => t.replace(/\s*[-–—]\s*(U\.S\. Energy|Today in Energy|EIA).*$/, '').trim(),
   },
   {
