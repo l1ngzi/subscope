@@ -104,7 +104,7 @@ const DISPLAY: [string, string][] = [
   ['cbc.ca', 'CBC'],
 ]
 
-const formatSourceName = (name: string): string => {
+export const formatSourceName = (name: string): string => {
   if (!name) return 'unknown'
   if (name.startsWith('support.claude')) {
     const slug = name.split('/').pop()?.replace(/^\d+-/, '') ?? 'support'

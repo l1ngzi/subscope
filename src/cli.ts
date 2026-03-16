@@ -5,10 +5,10 @@ import { createStore } from './store.ts'
 import { fetchAll, read, type ReadOpts } from './pipeline.ts'
 import type { SourceType } from './types.ts'
 import { detectType } from './adapters/index.ts'
-import { renderFeed, renderInteractive, renderSources, renderGroups } from './render.ts'
+import { renderFeed, renderInteractive, renderSources, renderGroups, formatSourceName } from './render.ts'
 import { interactiveConfig } from './interactive.ts'
 import { notify } from './notify.ts'
-import { readArticle } from './reader.ts'
+import { readArticle } from './reader/index.ts'
 import { sourceId, DIR, groupMatches } from './lib.ts'
 
 import { join } from 'path'
@@ -321,12 +321,16 @@ Write-Output "ok"
 // ── Route ──
 
 const parseReadFlags = (argv: string[]) => {
-  const opts: ReadOpts = {}
+  const opts: ReadOpts & { json?: boolean } = {}
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '-n' && argv[i + 1]) opts.limit = parseInt(argv[i + 1]!)
     if (argv[i] === '--type' && argv[i + 1]) opts.sourceType = argv[i + 1] as SourceType
     if (argv[i] === '--all' || argv[i] === '-a') opts.all = true
     if ((argv[i] === '-g' || argv[i] === '--group') && argv[i + 1]) opts.group = argv[i + 1]
+    if (argv[i] === '-j' || argv[i] === '--json') {
+      opts.json = true
+      if (argv[i + 1] && /^\d+$/.test(argv[i + 1]!)) opts.limit = parseInt(argv[i + 1]!)
+    }
   }
   return opts
 }
@@ -341,7 +345,17 @@ if (!command || command.startsWith('-') || isMode) {
   const { items, olderCount } = read(opts)
   const cfg = load()
 
-  if (process.stdout.isTTY && opts.limit === undefined) {
+  if (opts.json) {
+    const clean = (s: string) => s.replace(/<[^>]*>/g, '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
+    const output = items.map(i => ({
+      title: i.title,
+      source: formatSourceName(i.sourceName),
+      url: i.url,
+      summary: i.summary ? clean(i.summary) : undefined,
+      publishedAt: i.publishedAt,
+    }))
+    console.log(JSON.stringify(output))
+  } else if (process.stdout.isTTY && opts.limit === undefined) {
     await renderInteractive(items, olderCount, cfg.sources.length > 0)
   } else {
     renderFeed(items, olderCount, cfg.sources.length > 0)
