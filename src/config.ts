@@ -137,7 +137,7 @@ export const inferGroup = (url: string): string => {
   if (hostname.includes('dw.com') || hostname.includes('dw.de')) return 'news/dw'
   if (hostname.includes('nhk.or.jp')) return 'news/nhk'
   if (hostname.includes('aljazeera.com')) return 'news/aljazeera'
-  if (hostname.includes('cgtn.com')) return 'news/cgtn'
+  if (hostname.includes('people.com.cn')) return 'news/people'
   if (hostname.includes('tass.com')) return 'news/tass'
   if (hostname.includes('yna.co.kr')) return 'news/yonhap'
   if (hostname.includes('abc.net.au')) return 'news/abc-au'
