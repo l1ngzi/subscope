@@ -46,6 +46,14 @@ export const findFirst = ($: any, selectors: string): { text: string; el: any } 
   return null
 }
 
+/** Convert date-only (from URL) to a reasonable timestamp.
+ *  Uses noon local time, capped at current time to avoid future timestamps. */
+export const dateOnlyToISO = (y: string, m: string, d: string, tz = '+08:00'): string => {
+  const noon = new Date(`${y}-${m}-${d}T12:00:00${tz}`)
+  const now = new Date()
+  return (noon > now ? now : noon).toISOString()
+}
+
 export const item = (
   source: Source, url: string, title: string,
   opts?: { summary?: string; publishedAt?: string; key?: string },

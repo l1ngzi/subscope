@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import { item, sortDesc, UA, TLS } from '../../lib.ts'
+import { item, sortDesc, UA, TLS, dateOnlyToISO } from '../../lib.ts'
 import type { Source, FeedItem } from '../../types.ts'
 
 const BASE = 'http://www.news.cn'
@@ -29,7 +29,7 @@ export const fetchXinhua = async (source: Source): Promise<FeedItem[]> => {
     // Date from URL: /20260316/
     const dateMatch = articleUrl.match(/\/(\d{4})(\d{2})(\d{2})\//)
     const publishedAt = dateMatch
-      ? new Date(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T00:00:00+08:00`).toISOString()
+      ? dateOnlyToISO(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!)
       : undefined
 
     items.push(item(source, articleUrl, title, { publishedAt }))
