@@ -58,6 +58,23 @@ export const dateOnlyToISO = (y: string, m: string, d: string, tz = '+08:00'): s
   return (noon > now ? now : noon).toISOString()
 }
 
+/** Universal page fetch — cffi (Safari TLS) first, Bun fetch fallback.
+ *  Use this for all HTML fetching. Returns HTML string. */
+export const fetchPage = (url: string): string => {
+  try { return fetchWithCffi(url) } catch {}
+  // Fallback: Bun native fetch (sync via spawnSync to keep API consistent)
+  const r = Bun.spawnSync(['bun', '-e', `
+    const res = await fetch(${JSON.stringify(url)}, {
+      headers: { 'User-Agent': ${JSON.stringify(UA)} },
+      tls: { rejectUnauthorized: false },
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    process.stdout.write(await res.text());
+  `], { stdout: 'pipe', stderr: 'pipe', timeout: 20_000 })
+  if (r.exitCode !== 0) throw new Error(`fetchPage failed: ${new TextDecoder().decode(r.stderr).trim().slice(0, 100)}`)
+  return new TextDecoder().decode(r.stdout)
+}
+
 /** Fetch via curl_cffi (Python) — impersonates Safari/Chrome TLS fingerprint.
  *  Bypasses Azure WAF and other advanced bot detection that checks JA3/JA4. */
 export const fetchWithCffi = (url: string, impersonate = 'safari17_0'): string => {
