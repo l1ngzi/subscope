@@ -59,16 +59,28 @@ const commands: Record<string, () => Promise<void>> = {
     const silent = args.includes('--notify')
 
     const start = Date.now()
+    const spin = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
+    let frame = 0, spinning = false
 
-    if (!silent) console.log()
+    if (!silent) {
+      console.log(`\n  ${spin[0]} fetching...`)
+      spinning = true
+    }
+    const timer = spinning ? setInterval(() => {
+      frame = (frame + 1) % spin.length
+      console.log(`\x1b[1A\x1b[2K  ${spin[frame]} fetching...`)
+    }, 80) : null
+
     const { newItems, results } = await fetchAll({
       group,
       onResult: silent ? undefined : (r, done, total) => {
+        if (spinning) { spinning = false; clearInterval(timer!) }
+        const up = done === 1 ? '\x1b[1A\x1b[2K' : ''
         if (r.error) {
-          console.log(`  \x1b[31m✗\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.error}\x1b[0m`)
+          console.log(`${up}  \x1b[31m✗\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.error}\x1b[0m`)
         } else {
           const tag = r.added > 0 ? ` \x1b[32m(${r.added} new)\x1b[0m` : ''
-          console.log(`  \x1b[90m${done}/${total}\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.count}\x1b[0m${tag}`)
+          console.log(`${up}  \x1b[90m${done}/${total}\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.count}\x1b[0m${tag}`)
         }
       },
     })
