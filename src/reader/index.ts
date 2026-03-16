@@ -47,8 +47,18 @@ export const readArticle = async (url: string): Promise<{ title: string; text: s
       const rss = await readFromFeed(url, site.feedUrl).catch(() => null)
       if (rss) return rss
     }
-    // Fallback 2: Playwright ×1
-    html = fetchWithBrowser(url)
+    // Fallback 2: curl with minimal UA (bypasses Azure WAF that blocks Chrome UA)
+    html = ''
+    try {
+      const r = Bun.spawnSync(['curl', '-sL', '--max-time', '15', url, '-A', 'Mozilla/5.0'],
+        { stdout: 'pipe', stderr: 'pipe', timeout: 20_000 })
+      if (r.exitCode === 0) {
+        const t = new TextDecoder().decode(r.stdout)
+        if (t.length > 1000 && !t.includes('403 Forbidden')) html = t
+      }
+    } catch {}
+    // Fallback 3: Playwright
+    if (!html) html = fetchWithBrowser(url)
   }
 
   const $ = cheerio.load(html)
