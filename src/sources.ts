@@ -92,8 +92,7 @@ export const SOURCE_REGISTRY: SourceDef[] = [
   S('https://www.eia.gov/todayinenergy/', 'energy/eia'),
   S('https://www.energy.gov/newsroom', 'energy/doe'),
   S('https://www.opec.org/press-releases.html', 'energy/opec'),
-  // IRENA: Azure WAF blocks headless Chrome; only sitemap.xml accessible
-  // S('https://www.irena.org/News', 'energy/irena'),
+  S('https://www.irena.org/News', 'energy/irena'),
 
   // ── International Organizations ──
   S('https://news.un.org/feed/subscribe/en/news/all/rss.xml', 'intl/un'),

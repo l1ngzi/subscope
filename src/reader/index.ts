@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio'
+import { join } from 'path'
 import { UA, TLS, findFirst, retry } from '../lib.ts'
 import { fetchWithBrowser } from '../browser.ts'
 import type { SiteRule } from './types.ts'
@@ -9,6 +10,39 @@ import { aiRules } from './ai.ts'
 const SITES: SiteRule[] = [...econRules, ...newsRules, ...aiRules]
 
 export const readArticle = async (url: string): Promise<{ title: string; text: string }> => {
+  // IRENA: Azure WAF blocks headless Chrome; non-headless --start-minimized bypasses
+  if (url.includes('irena.org/News/')) {
+    const projectRoot = join(import.meta.dir, '..')
+    const script = [
+      `const{chromium}=require('playwright');`,
+      `(async()=>{`,
+      `const b=await chromium.launch({headless:false,channel:'chrome',`,
+      `args:['--disable-blink-features=AutomationControlled','--start-minimized']});`,
+      `const p=await b.newPage();`,
+      `await p.addInitScript(()=>{Object.defineProperty(navigator,'webdriver',{get:()=>false})});`,
+      `await p.goto(${JSON.stringify(url)},{waitUntil:'domcontentloaded',timeout:15000});`,
+      `const r=await p.evaluate(()=>{`,
+      `const t=document.querySelector('h1')?.textContent?.trim()||document.title;`,
+      `const el=document.querySelector('.c-RichText,.m-RichText');`,
+      `const ps=el?[...el.querySelectorAll('p,h2,h3,li,blockquote')].map(e=>e.tagName==='LI'?'• '+e.textContent.trim():e.textContent.trim()).filter(t=>t.length>5):[];`,
+      `return JSON.stringify({t,ps})});`,
+      `process.stdout.write(r);`,
+      `await b.close();`,
+      `})().catch(e=>{process.stderr.write(e.message);process.exit(1)});`,
+    ].join('')
+    const r = Bun.spawnSync(['node', '-e', script], {
+      stdout: 'pipe', stderr: 'pipe', timeout: 25_000,
+      cwd: projectRoot,
+      env: { ...process.env, NODE_PATH: join(projectRoot, 'node_modules') },
+    })
+    if (r.exitCode === 0) {
+      try {
+        const { t, ps } = JSON.parse(new TextDecoder().decode(r.stdout))
+        if (ps.length > 0) return { title: t, text: ps.join('\n\n') }
+      } catch {}
+    }
+  }
+
   // EU Presscorner: Angular SPA, use JSON API directly
   if (url.includes('ec.europa.eu/commission/presscorner/detail')) {
     const match = url.match(/detail\/(\w+)\/([A-Z]+_\d+_?\d*)/)
