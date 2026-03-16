@@ -18,8 +18,11 @@ export const fetchIRENA = async (source: Source): Promise<FeedItem[]> => {
   $('loc').each((_, el) => {
     const rawUrl = $(el).text().trim()
     if (!rawUrl.includes('/News/pressreleases/')) return
-    // Skip translated versions (end with -ZH, -RU, -FR, -ES, -AR, -PT)
-    if (/-(?:ZH|RU|FR|ES|AR|PT)$/.test(rawUrl)) return
+    // Current year only
+    const year = new Date().getFullYear()
+    if (!rawUrl.includes(`/${year}/`)) return
+    // Skip translated versions (end with -ZH, -RU, -FR, -ES, -AR, -PT, etc.)
+    if (/-(?:ZH|RU|FR|ES|AR|PT|JP|IT|DE|KO)$/.test(rawUrl)) return
 
     const url = rawUrl.replace('http://', 'https://')
     if (seen.has(url)) return
