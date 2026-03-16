@@ -138,7 +138,7 @@ export const econRules: SiteRule[] = [
   {
     test: u => u.includes('wto.org'),
     selector: '.centerCol',
-    title: '.kickertext, h1',
+    title: 'h1, title',
     cleanTitle: t => t.replace(/\s*[-–—|]\s*WTO.*$/, '').trim(),
   },
 ]
