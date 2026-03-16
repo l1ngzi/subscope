@@ -2,7 +2,8 @@
 
 import { load, save, addSource, removeSource, inferGroup } from './config.ts'
 import { createStore } from './store.ts'
-import { fetchAll, read } from './pipeline.ts'
+import { fetchAll, read, type ReadOpts } from './pipeline.ts'
+import type { SourceType } from './types.ts'
 import { detectType } from './adapters/index.ts'
 import { renderFeed, renderInteractive, renderSources, renderGroups } from './render.ts'
 import { interactiveConfig } from './interactive.ts'
@@ -311,10 +312,10 @@ Write-Output "ok"
 // ── Route ──
 
 const parseReadFlags = (argv: string[]) => {
-  const opts: { limit?: number; sourceType?: string; all?: boolean; group?: string } = {}
+  const opts: ReadOpts = {}
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '-n' && argv[i + 1]) opts.limit = parseInt(argv[i + 1]!)
-    if (argv[i] === '--type' && argv[i + 1]) opts.sourceType = argv[i + 1]
+    if (argv[i] === '--type' && argv[i + 1]) opts.sourceType = argv[i + 1] as SourceType
     if (argv[i] === '--all' || argv[i] === '-a') opts.all = true
     if ((argv[i] === '-g' || argv[i] === '--group') && argv[i + 1]) opts.group = argv[i + 1]
   }

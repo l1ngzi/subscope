@@ -101,7 +101,7 @@ export const createStore = (dbPath = DB_PATH) => {
     },
 
     removeBySource(sourceId: string) {
-      db.run('DELETE FROM items WHERE sourceId = ?', sourceId)
+      db.run('DELETE FROM items WHERE sourceId = ?', [sourceId])
     },
 
     close() {

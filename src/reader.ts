@@ -289,7 +289,7 @@ const extractText = ($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): string =
       for (let c = 0; c < colCount; c++) {
         const sub = (lastHeaderRow[c] ?? '').trim()
         const group = groups[c]
-        header[c] = sub && group && sub !== group ? `${group}: ${sub}` : sub || group
+        header[c] = sub && group && sub !== group ? `${group}: ${sub}` : sub || group || ''
       }
     }
 
