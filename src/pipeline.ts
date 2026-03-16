@@ -1,6 +1,7 @@
 import { load, activeSources } from './config.ts'
 import { createStore } from './store.ts'
 import { resolve } from './adapters/index.ts'
+import { retry } from './lib.ts'
 import type { FeedItem, SourceType } from './types.ts'
 
 export interface ReadOpts {
@@ -38,7 +39,7 @@ export const fetchAll = async (opts?: {
       const adapter = resolve(source.url)
       let result: FetchResult
       try {
-        const items = await adapter.fetch(source)
+        const items = await retry(() => adapter.fetch(source), 3, 500)
         const added = store.save(items)
         newItems += added
         result = { name: source.name, count: items.length, added }

@@ -54,6 +54,17 @@ export const dateOnlyToISO = (y: string, m: string, d: string, tz = '+08:00'): s
   return (noon > now ? now : noon).toISOString()
 }
 
+/** Retry an async function up to `n` times with delay between attempts */
+export const retry = async <T>(fn: () => Promise<T>, n: number, delay = 1000): Promise<T> => {
+  for (let i = 0; i < n; i++) {
+    try { return await fn() } catch (e) {
+      if (i === n - 1) throw e
+      await new Promise(r => setTimeout(r, delay * (i + 1)))
+    }
+  }
+  throw new Error('unreachable')
+}
+
 export const item = (
   source: Source, url: string, title: string,
   opts?: { summary?: string; publishedAt?: string; key?: string },

@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import { item, sortDesc, UA, TLS } from '../../lib.ts'
+import { item, sortDesc, UA, TLS, retry } from '../../lib.ts'
 import { fetchWithBrowser } from '../../browser.ts'
 import type { Source, FeedItem } from '../../types.ts'
 
@@ -8,17 +8,20 @@ const BASE = 'https://www.imf.org'
 export const fetchIMF = async (source: Source): Promise<FeedItem[]> => {
   let html: string
   try {
-    const res = await fetch(source.url, {
-      headers: {
-        'User-Agent': UA,
-        'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none', 'Sec-Fetch-User': '?1',
-      },
-      ...TLS(source.url),
-    } as any)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    html = await res.text()
-    if (!html.includes('/news/articles/')) throw new Error('blocked')
+    html = await retry(async () => {
+      const res = await fetch(source.url, {
+        headers: {
+          'User-Agent': UA,
+          'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none', 'Sec-Fetch-User': '?1',
+        },
+        ...TLS(source.url),
+      } as any)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const text = await res.text()
+      if (!text.includes('/news/articles/')) throw new Error('blocked')
+      return text
+    }, 3, 500)
   } catch {
     html = fetchWithBrowser(source.url)
   }

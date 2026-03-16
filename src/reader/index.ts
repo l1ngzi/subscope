@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import { UA, TLS, findFirst } from '../lib.ts'
+import { UA, TLS, findFirst, retry } from '../lib.ts'
 import { fetchWithBrowser } from '../browser.ts'
 import type { SiteRule } from './types.ts'
 import { econRules } from './econ.ts'
@@ -29,18 +29,23 @@ export const readArticle = async (url: string): Promise<{ title: string; text: s
 
   let html: string
   try {
-    const res = await fetch(url, { headers, ...TLS(url) } as any)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    html = await res.text()
+    // Primary: HTTP with retry ×3
+    html = await retry(async () => {
+      const res = await fetch(url, { headers, ...TLS(url) } as any)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.text()
+    }, 3, 500)
     // Angular SPA: detect unrendered template and retry with Playwright networkidle
     if (html.includes('{{data.') && html.includes('ng-controller')) {
       html = fetchWithBrowser(url, 'networkidle')
     }
   } catch {
+    // Fallback 1: RSS feed content
     if (site?.feedUrl) {
       const rss = await readFromFeed(url, site.feedUrl).catch(() => null)
       if (rss) return rss
     }
+    // Fallback 2: Playwright ×1
     html = fetchWithBrowser(url)
   }
 
