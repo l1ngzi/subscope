@@ -6,7 +6,7 @@ import { SOURCE_REGISTRY } from './sources.ts'
 import { detectType } from './adapters/index.ts'
 import type { Source } from './types.ts'
 
-export type ModeName = 'formal' | 'quick' | string
+export type ModeName = 'ai' | 'quick' | string
 
 export interface ModeConfig {
   types?: string[]
@@ -22,7 +22,7 @@ export interface Config {
 }
 
 const DEFAULT_MODES: Record<string, ModeConfig> = {
-  formal: { types: ['website'], groups: ['ai'] },
+  ai: { types: ['website'], groups: ['ai'] },
   quick: { types: ['youtube', 'twitter'] },
   eco: { groups: ['econ'] },
   glob: { groups: ['news'] },
@@ -68,7 +68,7 @@ export const load = (): Config => {
     for (let i = 1; i < parts.length; i++) allPaths.add(parts.slice(0, i).join('/'))
   }
 
-  const defaultMode: ModeName = raw?.defaultMode ?? 'formal'
+  const defaultMode: ModeName = raw?.defaultMode ?? 'ai'
   const customModes = (raw?.modes ?? {}) as Record<string, ModeConfig>
   const modes: Record<string, ModeConfig> = { ...DEFAULT_MODES }
   for (const [name, cfg] of Object.entries(customModes))
