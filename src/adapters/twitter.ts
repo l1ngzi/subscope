@@ -36,7 +36,8 @@ const FEATURES = JSON.stringify({
 })
 
 // Session cache — CSRF token reused across all X sources in one fetch cycle
-let sessionCache: { ct0: string; authToken: string } | null = null
+// Promise-based mutex: concurrent callers await the same in-flight request
+let sessionPromise: Promise<{ ct0: string; authToken: string }> | null = null
 
 export const twitter: SourceAdapter = {
   type: 'twitter',
@@ -46,6 +47,7 @@ export const twitter: SourceAdapter = {
   },
 
   async fetch(source: Source): Promise<FeedItem[]> {
+    // Extract handle: "x.com/AnthropicAI" or "x.com/@AnthropicAI" → "AnthropicAI"
     const username = source.url.match(/(?:x\.com|twitter\.com)\/?@?([\w]+)/)?.[1]
     if (!username) return []
 
@@ -59,27 +61,30 @@ export const twitter: SourceAdapter = {
 
 // ── Session ──
 
-const getSession = async () => {
-  if (sessionCache) return sessionCache
+const getSession = () => {
+  if (sessionPromise) return sessionPromise
 
-  const authToken = (() => {
-    try {
-      if (!existsSync(AUTH_FILE)) return null
-      return (parse(readFileSync(AUTH_FILE, 'utf-8')) as any)?.x?.auth_token ?? null
-    } catch { return null }
+  sessionPromise = (async () => {
+    const authToken = (() => {
+      try {
+        if (!existsSync(AUTH_FILE)) return null
+        return (parse(readFileSync(AUTH_FILE, 'utf-8')) as any)?.x?.auth_token ?? null
+      } catch { return null }
+    })()
+    if (!authToken) throw new Error('X auth required. Run: subscope auth x <token>')
+
+    const res = await fetch('https://x.com', {
+      headers: { Cookie: `auth_token=${authToken}` },
+      redirect: 'manual',
+    })
+    const cookies = res.headers.getSetCookie?.() ?? []
+    const ct0 = cookies.find(c => c.startsWith('ct0='))?.split('=')[1]?.split(';')[0]
+    if (!ct0) throw new Error('X: failed to get CSRF token — auth_token may be expired')
+
+    return { ct0, authToken }
   })()
-  if (!authToken) throw new Error('X auth required. Run: subscope auth x <token>')
 
-  const res = await fetch('https://x.com', {
-    headers: { Cookie: `auth_token=${authToken}` },
-    redirect: 'manual',
-  })
-  const ct0 = res.headers.getSetCookie?.()
-    .find(c => c.startsWith('ct0='))?.split('=')[1]?.split(';')[0]
-  if (!ct0) throw new Error('X: failed to get CSRF token — auth_token may be expired')
-
-  sessionCache = { ct0, authToken }
-  return sessionCache
+  return sessionPromise
 }
 
 const apiHeaders = (s: { ct0: string; authToken: string }) => ({
@@ -107,7 +112,7 @@ const resolveUserId = async (session: { ct0: string; authToken: string }, userna
 
 const fetchUserTweets = async (session: { ct0: string; authToken: string }, userId: string): Promise<RawTweet[]> => {
   const variables = JSON.stringify({
-    userId, count: 40,
+    userId, count: 40, // X API max per page
     includePromotedContent: false,
     withQuickPromoteEligibilityTweetFields: false,
     withVoice: false, withV2Timeline: true,

@@ -1,20 +1,20 @@
 import { load, save, type Config } from './config.ts'
-import { sourceId } from './lib.ts'
+import { sourceId, groupMatches } from './lib.ts'
 import type { Source, SourceType } from './types.ts'
 
-// ── ANSI ──
+// ── ANSI (shared names with render.ts) ──
 
-const R = '\x1b[0m'
-const B = '\x1b[1m'
-const D = '\x1b[2m'
-const C = '\x1b[36m'
-const G = '\x1b[90m'
-const Y = '\x1b[33m'
-const W = '\x1b[37m'
-const BAR = '\x1b[48;5;236m'
+const RESET = '\x1b[0m'
+const BOLD = '\x1b[1m'
+const DIM = '\x1b[2m'
+const CYAN = '\x1b[36m'
+const GRAY = '\x1b[90m'
+const YELLOW = '\x1b[33m'
+const WHITE = '\x1b[37m'
+const BG_BAR = '\x1b[48;5;236m'
 
-const w = () => process.stdout.columns || 80
-const h = () => process.stdout.rows || 24
+const cols = () => process.stdout.columns || 80
+const rows = () => process.stdout.rows || 24
 
 // ── Source catalog ──
 
@@ -84,15 +84,14 @@ export const interactiveConfig = (): Promise<void> => {
 
   const sourcesIn = (path: string): Source[] => {
     if (!path) return cfg.sources
-    return cfg.sources.filter(s => s.group === path || s.group.startsWith(path + '/'))
+    return cfg.sources.filter(s => groupMatches(s.group, path))
   }
 
   const isActive = (path: string) =>
-    cfg.activeGroups.some(g => g === path || g.startsWith(path + '/'))
+    cfg.activeGroups.some(g => groupMatches(g, path))
 
   const sourceCount = (path: string) => {
-    const prefix = path + '/'
-    return cfg.sources.filter(s => s.group === path || s.group.startsWith(prefix))
+    return cfg.sources.filter(s => groupMatches(s.group, path))
   }
 
   // ── Folder rows ──
@@ -105,7 +104,7 @@ export const interactiveConfig = (): Promise<void> => {
     if (!p) {
       r.push({ kind: 'label', text: 'Default Mode' })
       for (const [name, m] of Object.entries(cfg.modes))
-        r.push({ kind: 'mode', key: name, text: `${name}  ${D}${[m.types?.join(', '), m.groups?.map(g => `[${g}]`).join(', ')].filter(Boolean).join(' ')}${R}`, active: cfg.defaultMode === name })
+        r.push({ kind: 'mode', key: name, text: `${name}  ${DIM}${[m.types?.join(', '), m.groups?.map(g => `[${g}]`).join(', ')].filter(Boolean).join(' ')}${RESET}`, active: cfg.defaultMode === name })
       r.push({ kind: 'gap', text: '' })
       r.push({ kind: 'label', text: 'Groups' })
     }
@@ -114,7 +113,7 @@ export const interactiveConfig = (): Promise<void> => {
       const full = p ? `${p}/${f}` : f
       const all = sourceCount(full)
       const on = all.filter(s => s.active).length
-      r.push({ kind: 'folder', key: full, text: `${f}  ${D}${on}/${all.length}${R}`, active: isActive(full) })
+      r.push({ kind: 'folder', key: full, text: `${f}  ${DIM}${on}/${all.length}${RESET}`, active: isActive(full) })
     }
     // Show sources directly in this folder
     const directSources = cfg.sources.filter(s => s.group === p)
@@ -123,7 +122,7 @@ export const interactiveConfig = (): Promise<void> => {
       r.push({ kind: 'label', text: 'Sources' })
     }
     for (const s of directSources) {
-      r.push({ kind: 'source', key: s.id, text: `${s.name}  ${D}${s.type}${R}`, active: s.active })
+      r.push({ kind: 'source', key: s.id, text: `${s.name}  ${DIM}${s.type}${RESET}`, active: s.active })
     }
     return r
   }
@@ -140,8 +139,8 @@ export const interactiveConfig = (): Promise<void> => {
 
   const toggleFolder = (path: string) => {
     const paths = new Set<string>()
-    for (const f of allFolders()) if (f === path || f.startsWith(path + '/')) paths.add(f)
-    for (const s of cfg.sources) if (s.group === path || s.group.startsWith(path + '/')) paths.add(s.group)
+    for (const f of allFolders()) if (groupMatches(f, path)) paths.add(f)
+    for (const s of cfg.sources) if (groupMatches(s.group, path)) paths.add(s.group)
     if (isActive(path)) {
       cfg.activeGroups = cfg.activeGroups.filter(g => !paths.has(g))
     } else {
@@ -153,10 +152,10 @@ export const interactiveConfig = (): Promise<void> => {
 
   const CLR = '\x1b[K'
   const render = (lines: string[], hint: string) => {
-    while (lines.length < h() - 2) lines.push('')
-    const pad = Math.max(0, w() - hint.length - 4)
-    const mark = dirty ? `${C}*${R} ` : '  '
-    lines.push(`${BAR}${W} ${mark}${D}${hint}${' '.repeat(pad)}${R}`)
+    while (lines.length < rows() - 2) lines.push('')
+    const pad = Math.max(0, cols() - hint.length - 4)
+    const mark = dirty ? `${CYAN}*${RESET} ` : '  '
+    lines.push(`${BG_BAR}${WHITE} ${mark}${DIM}${hint}${' '.repeat(pad)}${RESET}`)
     process.stdout.write(`\x1b[H\x1b[?25l` + lines.map(l => l + CLR).join('\n') + '\x1b[J')
   }
 
@@ -165,22 +164,22 @@ export const interactiveConfig = (): Promise<void> => {
     const path = cur().path
 
     if (mode.kind === 'folders') {
-      const bc = path ? path.split('/').map(p => `${B}${p}${R}`).join(` ${D}/${R} `) : `${B}subscope config${R}`
+      const bc = path ? path.split('/').map(p => `${BOLD}${p}${RESET}`).join(` ${DIM}/${RESET} `) : `${BOLD}subscope config${RESET}`
       lines.push(`  ${bc}`)
       lines.push('')
       const rows = folderRows()
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i]!
         if (r.kind === 'gap') { lines.push(''); continue }
-        if (r.kind === 'label') { lines.push(`  ${D}${r.text}${R}`); continue }
+        if (r.kind === 'label') { lines.push(`  ${DIM}${r.text}${RESET}`); continue }
         const sel = i === cur().cursor
-        const ptr = sel ? `${C}\u203a${R}` : ' '
+        const ptr = sel ? `${CYAN}\u203a${RESET}` : ' '
         const ico = r.kind === 'folder'
-          ? (r.active ? `${C}\u25b8${R}` : `${G}\u25b8${R}`)
-          : (r.active ? `${C}\u25cf${R}` : `${G}\u25cb${R}`)
-        const lbl = sel ? `${B}${r.text}${R}` : r.text
-        const arrow = sel && r.kind === 'folder' ? `  ${D}\u2192${R}` : ''
-        const tag = r.kind === 'mode' && r.active ? `  ${D}(default)${R}` : ''
+          ? (r.active ? `${CYAN}\u25b8${RESET}` : `${GRAY}\u25b8${RESET}`)
+          : (r.active ? `${CYAN}\u25cf${RESET}` : `${GRAY}\u25cb${RESET}`)
+        const lbl = sel ? `${BOLD}${r.text}${RESET}` : r.text
+        const arrow = sel && r.kind === 'folder' ? `  ${DIM}\u2192${RESET}` : ''
+        const tag = r.kind === 'mode' && r.active ? `  ${DIM}(default)${RESET}` : ''
         lines.push(` ${ptr} ${ico} ${lbl}${tag}${arrow}`)
       }
       render(lines, path
@@ -188,24 +187,24 @@ export const interactiveConfig = (): Promise<void> => {
         : '\u2191\u2193 move  space toggle  \u2192 open  s sources  n new  e rename  d del  q save')
 
     } else if (mode.kind === 'sources') {
-      lines.push(`  ${B}Sources${R} ${D}in ${path || '/'}${R}`)
+      lines.push(`  ${BOLD}Sources${RESET} ${DIM}in ${path || '/'}${RESET}`)
       lines.push('')
       const srcs = sourcesIn(path)
-      if (srcs.length === 0) lines.push(`  ${D}No sources. Press a to add.${R}`)
+      if (srcs.length === 0) lines.push(`  ${DIM}No sources. Press a to add.${RESET}`)
       for (let i = 0; i < srcs.length; i++) {
         const s = srcs[i]!
         const sel = i === mode.cursor
-        const ptr = sel ? `${C}\u203a${R}` : ' '
-        const ico = s.active ? `${C}\u25cf${R}` : `${G}\u25cb${R}`
-        const lbl = sel ? `${B}${s.name}${R}` : s.name
-        lines.push(` ${ptr} ${ico} ${lbl}  ${D}${s.type}${R}`)
-        lines.push(`       ${D}${s.url}${R}`)
+        const ptr = sel ? `${CYAN}\u203a${RESET}` : ' '
+        const ico = s.active ? `${CYAN}\u25cf${RESET}` : `${GRAY}\u25cb${RESET}`
+        const lbl = sel ? `${BOLD}${s.name}${RESET}` : s.name
+        lines.push(` ${ptr} ${ico} ${lbl}  ${DIM}${s.type}${RESET}`)
+        lines.push(`       ${DIM}${s.url}${RESET}`)
       }
       render(lines, '\u2191\u2193 move  space toggle  a add  e edit  d delete  q back')
 
     } else if (mode.kind === 'catalog') {
-      lines.push(`  ${B}Add source${R}  ${D}type to search${R}`)
-      lines.push(`  ${D}Search:${R} ${Y}${mode.search}\u2588${R}`)
+      lines.push(`  ${BOLD}Add source${RESET}  ${DIM}type to search${RESET}`)
+      lines.push(`  ${DIM}Search:${RESET} ${YELLOW}${mode.search}\u2588${RESET}`)
       lines.push('')
       const existing = new Set(cfg.sources.map(s => s.url))
       const search = mode.search
@@ -217,13 +216,13 @@ export const interactiveConfig = (): Promise<void> => {
       for (let i = 0; i < filtered.length; i++) {
         const e = filtered[i]!
         const sel = i === mode.cursor
-        const ptr = sel ? `${C}\u203a${R}` : ' '
-        const ico = e.template ? `${D}\u2026${R}` : `${C}+${R}`
-        const lbl = sel ? `${B}${e.label}${R}` : e.label
-        const hint = e.template ? `  ${D}${e.placeholder}${R}` : `  ${D}${e.url?.replace('https://', '')}${R}`
+        const ptr = sel ? `${CYAN}\u203a${RESET}` : ' '
+        const ico = e.template ? `${DIM}\u2026${RESET}` : `${CYAN}+${RESET}`
+        const lbl = sel ? `${BOLD}${e.label}${RESET}` : e.label
+        const hint = e.template ? `  ${DIM}${e.placeholder}${RESET}` : `  ${DIM}${e.url?.replace('https://', '')}${RESET}`
         lines.push(` ${ptr} ${ico} ${lbl}${hint}`)
       }
-      if (filtered.length === 0) lines.push(`  ${D}No matches${R}`)
+      if (filtered.length === 0) lines.push(`  ${DIM}No matches${RESET}`)
       // Store filtered list for key handler
       ;(mode as any)._filtered = filtered
       render(lines, '\u2191\u2193 select  enter confirm  q cancel')
@@ -233,9 +232,9 @@ export const interactiveConfig = (): Promise<void> => {
         : mode.purpose === 'rename-folder' ? 'Rename'
         : mode.purpose === 'add-handle' ? (mode.meta?.placeholder ?? 'Input')
         : 'Input'
-      lines.push(`  ${B}${label}${R}`)
+      lines.push(`  ${BOLD}${label}${RESET}`)
       lines.push('')
-      lines.push(`  ${Y}${mode.buf}\u2588${R}`)
+      lines.push(`  ${YELLOW}${mode.buf}\u2588${RESET}`)
       render(lines, 'enter confirm  q cancel')
     }
   }
@@ -299,9 +298,9 @@ export const interactiveConfig = (): Promise<void> => {
           const r = rows[cur().cursor]
           if (r?.kind === 'folder') {
             const p = r.key!
-            if (!cfg.sources.some(s => s.group === p || s.group.startsWith(p + '/'))) {
-              cfg.folders = cfg.folders.filter(f => f !== p && !f.startsWith(p + '/'))
-              cfg.activeGroups = cfg.activeGroups.filter(g => g !== p && !g.startsWith(p + '/'))
+            if (!cfg.sources.some(s => groupMatches(s.group, p))) {
+              cfg.folders = cfg.folders.filter(f => !groupMatches(f, p))
+              cfg.activeGroups = cfg.activeGroups.filter(g => !groupMatches(g, p))
               dirty = true
               const newRows = folderRows()
               cur().cursor = Math.min(cur().cursor, Math.max(0, newRows.length - 1))

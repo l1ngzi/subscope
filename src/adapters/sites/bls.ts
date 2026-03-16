@@ -25,6 +25,7 @@ export const fetchBLS = async (source: Source): Promise<FeedItem[]> => {
     const text = $html(el).text().replace(/\s+/g, ' ').trim()
     if (!text) return
 
+    // "Consumer Price Index: rose 0.4% in Feb 2026" → [name, value+date]
     const match = text.match(/^(.+?):\s*(.+?\d{4})/)
     if (!match) return
 
@@ -36,6 +37,7 @@ export const fetchBLS = async (source: Source): Promise<FeedItem[]> => {
       ? (newsLink.startsWith('http') ? newsLink : `https://www.bls.gov${newsLink}`)
       : 'https://www.bls.gov/bls/newsrels.htm'
 
+    // Extract date: "in Feb. 2026" or "of 4th Qtr of 2025"
     const dateMatch = value.match(/(?:in|of)\s+(\w+\.?\s+(?:Qtr\s+(?:of\s+)?)?\d{4})/)
 
     items.push(item(source, url, `${name}: ${value}`, {

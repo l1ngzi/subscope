@@ -23,9 +23,13 @@ const parseRSC = (html: string, source: Source): FeedItem[] => {
   while ((pos = html.indexOf('publishedOn', pos + 1)) !== -1) {
     const window = html.slice(pos, pos + 1500)
 
+    // RSC payload: publishedOn followed by ISO date within a few chars
     const date = window.match(/publishedOn.{3,6}?(\d{4}-\d{2}-\d{2}T[\d:.]+Z)/)?.[1]
+    // slug → current → "the-actual-slug" (RSC nested JSON structure)
     const slug = window.match(/slug.*?current.{3,6}?([\w-]+)/)?.[1]
+    // RSC escaped JSON: title\":\""Some Title\""
     const title = window.match(/title\\*":\\*"(.+?)\\*"/)?.[1]
+    // summary can be null or an escaped string in the same format
     const summaryMatch = window.match(/summary\\*":(null|\\*"(.+?)\\*")/)
     const summary = summaryMatch?.[1] === 'null' ? undefined : summaryMatch?.[2]
 

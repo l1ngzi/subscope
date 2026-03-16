@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import { UA, TLS } from './lib.ts'
+import { UA, TLS, findFirst } from './lib.ts'
 import { fetchWithBrowser } from './browser.ts'
 
 // Site-specific content selectors and extraction rules
@@ -180,7 +180,7 @@ export const readArticle = async (url: string): Promise<{ title: string; text: s
 
   let html: string
   try {
-    const res = await fetch(url, { headers, ...TLS } as any)
+    const res = await fetch(url, { headers, ...TLS(url) } as any)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     html = await res.text()
   } catch {
@@ -193,27 +193,18 @@ export const readArticle = async (url: string): Promise<{ title: string; text: s
 
   const $ = cheerio.load(html)
 
-  // Title
+  // Title — try site-specific selectors, fall back to <title>
   const titleSel = site?.title ?? 'h1, title'
-  let title = ''
-  for (const sel of titleSel.split(',')) {
-    title = $(sel.trim()).first().text().trim()
-    if (title) break
-  }
-  if (!title) title = $('title').text().trim()
+  let title = findFirst($, titleSel)?.text || $('title').text().trim()
   if (site?.cleanTitle) title = site.cleanTitle(title)
 
-  // Body
-  let $body: cheerio.Cheerio<any> | null = null
-  if (site?.pick) $body = site.pick($)
-  if (!$body || !$body.length) {
+  // Body — try site pick function, then selector list, then <body>
+  let $body: cheerio.Cheerio<any> | null = site?.pick?.($) ?? null
+  if (!$body?.length) {
     const selector = site?.selector ?? 'article, main, .content, .post-body, body'
-    for (const sel of selector.split(',')) {
-      const $el = $(sel.trim())
-      if ($el.length) { $body = $el.first(); break }
-    }
+    $body = findFirst($, selector)?.el ?? null
   }
-  if (!$body || !$body.length) $body = $('body')
+  if (!$body?.length) $body = $('body')
 
   // Strip noise
   $body.find('script, style, noscript, nav, footer, .nav, .footer, .sidebar, .breadcrumb, img, svg, iframe, video, .ad, .share, .social, [class*="share"], button').remove()
@@ -265,8 +256,9 @@ const extractText = ($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): string =
     const colCount = Math.max(...rows.map(r => r.length))
     for (const row of rows) { while (row.length < colCount) row.push(''); row.splice(colCount) }
 
-    // Find data start (first row where most cells are numeric)
-    const isNumRow = (r: string[]) => r.filter(c => /^-?[\d,.]+%?$/.test((c ?? '').replace(/[()p]/g, ''))).length > r.length / 3
+    // Find data start: first row where >1/3 of cells are numeric (e.g. "1,234", "-5.6%", "(0.3)")
+    const NUMERIC_THRESHOLD = 1 / 3
+    const isNumRow = (r: string[]) => r.filter(c => /^-?[\d,.]+%?$/.test((c ?? '').replace(/[()p]/g, ''))).length > r.length * NUMERIC_THRESHOLD
     let dataStart = rows.findIndex(r => isNumRow(r))
     if (dataStart < 0) dataStart = rows.length > 2 ? 2 : 1
 
@@ -344,7 +336,7 @@ const extractText = ($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): string =
 // ── RSS feed fallback ──
 
 const readFromFeed = async (articleUrl: string, feedUrl: string): Promise<{ title: string; text: string }> => {
-  const res = await fetch(feedUrl, TLS as any)
+  const res = await fetch(feedUrl, TLS(feedUrl) as any)
   if (!res.ok) throw new Error(`RSS fetch failed: ${res.status}`)
   const $ = cheerio.load(await res.text(), { xml: true })
 
@@ -368,7 +360,7 @@ const resolveEdgarDoc = async (indexUrl: string): Promise<{ docUrl: string; titl
   try {
     const res = await fetch(indexUrl, {
       headers: { 'User-Agent': 'Subscope/1.0 (personal feed aggregator)' },
-      ...TLS,
+      ...TLS(indexUrl),
     } as any)
     if (!res.ok) return null
     const html = await res.text()
@@ -380,9 +372,10 @@ const resolveEdgarDoc = async (indexUrl: string): Promise<{ docUrl: string; titl
     if (cikMatch) {
       try {
         const cik = cikMatch[1]!.padStart(10, '0')
-        const api = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+        const apiUrl = `https://data.sec.gov/submissions/CIK${cik}.json`
+        const api = await fetch(apiUrl, {
           headers: { 'User-Agent': 'Subscope/1.0 (personal feed aggregator)' },
-          ...TLS,
+          ...TLS(apiUrl),
         } as any)
         if (api.ok) company = ((await api.json()) as any).name ?? ''
       } catch {}

@@ -17,6 +17,7 @@ export const youtube: SourceAdapter = {
       },
     }).then(r => r.text())
 
+    // YouTube embeds video data as JSON in a <script> tag on channel pages
     const match = html.match(/var ytInitialData\s*=\s*(\{.+?\});\s*<\/script/s)
     if (!match) return []
 
@@ -41,7 +42,7 @@ export const youtube: SourceAdapter = {
   },
 }
 
-// "2 weeks ago" → ISO date
+// "2 weeks ago" → ISO date. Matches YouTube's relative format: "<N> <unit>[s] ago"
 const relativeToISO = (rel: string): string => {
   const match = rel.match(/(\d+)\s*(second|minute|hour|day|week|month|year)/)
   if (!match) return new Date().toISOString()

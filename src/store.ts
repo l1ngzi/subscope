@@ -9,6 +9,7 @@ const DB_PATH = join(DIR, 'subscope.db')
 export interface QueryOpts {
   limit?: number
   sourceType?: SourceType
+  sourceIds?: string[]
   since?: string  // ISO date string
 }
 
@@ -60,13 +61,17 @@ export const createStore = (dbPath = DB_PATH) => {
     },
 
     query(opts: QueryOpts = {}): FeedItem[] {
-      const { limit, sourceType, since } = opts
+      const { limit, sourceType, sourceIds, since } = opts
       const conditions: string[] = []
       const params: (string | number)[] = []
 
       if (sourceType) {
         conditions.push('sourceType = ?')
         params.push(sourceType)
+      }
+      if (sourceIds?.length) {
+        conditions.push(`sourceId IN (${sourceIds.map(() => '?').join(',')})`)
+        params.push(...sourceIds)
       }
       if (since) {
         conditions.push('publishedAt >= ?')
@@ -82,14 +87,18 @@ export const createStore = (dbPath = DB_PATH) => {
         .all(...params) as FeedItem[]
     },
 
-    count(opts: { sourceType?: SourceType; since?: string } = {}): number {
-      const { sourceType, since } = opts
+    count(opts: { sourceType?: SourceType; sourceIds?: string[]; since?: string } = {}): number {
+      const { sourceType, sourceIds, since } = opts
       const conditions: string[] = []
       const params: (string | number)[] = []
 
       if (sourceType) {
         conditions.push('sourceType = ?')
         params.push(sourceType)
+      }
+      if (sourceIds?.length) {
+        conditions.push(`sourceId IN (${sourceIds.map(() => '?').join(',')})`)
+        params.push(...sourceIds)
       }
       if (since) {
         conditions.push('publishedAt < ?')

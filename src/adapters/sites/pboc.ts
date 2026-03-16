@@ -5,7 +5,7 @@ import type { Source, FeedItem } from '../../types.ts'
 const BASE = 'https://www.pbc.gov.cn'
 
 export const fetchPBOC = async (source: Source): Promise<FeedItem[]> => {
-  const res = await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS } as any)
+  const res = await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS(source.url) } as any)
   const $ = cheerio.load(await res.text())
   const items: FeedItem[] = []
 

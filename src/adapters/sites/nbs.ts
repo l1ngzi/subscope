@@ -3,7 +3,7 @@ import { item, sortDesc, UA, TLS } from '../../lib.ts'
 import type { Source, FeedItem } from '../../types.ts'
 
 export const fetchNBS = async (source: Source): Promise<FeedItem[]> => {
-  const res = await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS } as any)
+  const res = await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS(source.url) } as any)
   const text = await res.text()
 
   if (source.url.endsWith('.xml') || text.trimStart().startsWith('<?xml')) {

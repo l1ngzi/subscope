@@ -9,7 +9,7 @@ import { renderFeed, renderInteractive, renderSources, renderGroups } from './re
 import { interactiveConfig } from './interactive.ts'
 import { notify } from './notify.ts'
 import { readArticle } from './reader.ts'
-import { sourceId, DIR } from './lib.ts'
+import { sourceId, DIR, groupMatches } from './lib.ts'
 
 import { join } from 'path'
 import { homedir } from 'os'
@@ -24,8 +24,13 @@ const [command, ...args] = process.argv.slice(2)
 const authFile = join(DIR, 'auth.yml')
 
 const loadAuth = (): any => {
-  try { return existsSync(authFile) ? yamlParse(readFileSync(authFile, 'utf-8')) ?? {} : {} }
-  catch { return {} }
+  if (!existsSync(authFile)) return {}
+  try {
+    return yamlParse(readFileSync(authFile, 'utf-8')) ?? {}
+  } catch (e: any) {
+    console.error(`  Warning: failed to parse ${authFile}: ${e.message}`)
+    return {}
+  }
 }
 
 const saveAuth = (auth: any) => {
@@ -105,7 +110,8 @@ const commands: Record<string, () => Promise<void>> = {
   },
 
   watch: async () => {
-    const minutes = parseInt(args[0] ?? '10')
+    const DEFAULT_WATCH_INTERVAL = 10 // minutes
+    const minutes = parseInt(args[0] ?? String(DEFAULT_WATCH_INTERVAL))
     console.log(`\n  Watching every ${minutes}m. Ctrl+C to stop.\n`)
 
     const tick = async () => {
@@ -122,7 +128,7 @@ const commands: Record<string, () => Promise<void>> = {
   },
 
   'watch-install': async () => {
-    const minutes = parseInt(args[0] ?? '10')
+    const minutes = parseInt(args[0] ?? '10') // default same as watch
     const bun = join(homedir(), '.bun', 'bin', 'bun.exe').replace(/\//g, '\\')
     const cli = join(import.meta.dir, 'cli.ts').replace(/\//g, '\\')
 
@@ -159,14 +165,14 @@ Write-Output "ok"
     const allGroups = [...new Set(config.sources.map(s => s.group))]
 
     if (!action) {
-      const sources = config.sources.filter(s => s.group === sub || s.group.startsWith(sub + '/'))
+      const sources = config.sources.filter(s => groupMatches(s.group, sub))
       if (sources.length === 0) { console.log(`\n  Group "${sub}" not found or empty.\n`); return }
       renderSources(sources)
       return
     }
 
     if (action === 'on') {
-      const matching = allGroups.filter(g => g === sub || g.startsWith(sub + '/'))
+      const matching = allGroups.filter(g => groupMatches(g, sub))
       if (matching.length === 0) { console.log(`\n  No groups matching "${sub}".\n`); return }
       for (const g of matching) if (!config.activeGroups.includes(g)) config.activeGroups.push(g)
       save(config)
@@ -176,7 +182,7 @@ Write-Output "ok"
 
     if (action === 'off') {
       const before = config.activeGroups.length
-      config.activeGroups = config.activeGroups.filter(g => g !== sub && !g.startsWith(sub + '/'))
+      config.activeGroups = config.activeGroups.filter(g => !groupMatches(g, sub))
       save(config)
       const removed = before - config.activeGroups.length
       console.log(`\n  Deactivated ${removed} group${removed !== 1 ? 's' : ''} matching "${sub}".\n`)

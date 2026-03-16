@@ -156,7 +156,8 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
     renderFeed(allItems, olderCount, hasSources)
     return Promise.resolve()
   }
-  if (allItems.length <= 3) {
+  const MIN_INTERACTIVE_ITEMS = 3
+  if (allItems.length <= MIN_INTERACTIVE_ITEMS) {
     console.log()
     const maxWidth = cols() - 4
     for (const i of allItems) for (const line of formatItem(i, maxWidth)) console.log(line)

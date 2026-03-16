@@ -6,7 +6,7 @@ const BASE = 'https://home.treasury.gov'
 
 export const fetchTreasury = async (source: Source): Promise<FeedItem[]> => {
   const $ = cheerio.load(
-    await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS } as any).then(r => r.text())
+    await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS(source.url) } as any).then(r => r.text())
   )
   const items: FeedItem[] = []
   const seen = new Set<string>()

@@ -7,7 +7,7 @@ export const website: SourceAdapter = {
   test: () => true,
 
   async fetch(source: Source): Promise<FeedItem[]> {
-    const res = await globalThis.fetch(source.url, TLS as any)
+    const res = await globalThis.fetch(source.url, TLS(source.url) as any)
     const text = await res.text()
     const contentType = res.headers.get('content-type') ?? ''
 
@@ -23,7 +23,7 @@ export const website: SourceAdapter = {
 
     if (feedUrl) {
       const resolved = new URL(feedUrl, source.url).href
-      const xml = await globalThis.fetch(resolved, TLS as any).then(r => r.text())
+      const xml = await globalThis.fetch(resolved, TLS(resolved) as any).then(r => r.text())
       return parseFeed(xml, source)
     }
 

@@ -14,7 +14,7 @@ export const fetchIMF = async (source: Source): Promise<FeedItem[]> => {
         'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate',
         'Sec-Fetch-Site': 'none', 'Sec-Fetch-User': '?1',
       },
-      ...TLS,
+      ...TLS(source.url),
     } as any)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     html = await res.text()

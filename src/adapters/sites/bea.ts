@@ -6,7 +6,7 @@ const BASE = 'https://www.bea.gov'
 
 export const fetchBEA = async (source: Source): Promise<FeedItem[]> => {
   const $ = cheerio.load(
-    await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS } as any).then(r => r.text())
+    await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS(source.url) } as any).then(r => r.text())
   )
   const items: FeedItem[] = []
 

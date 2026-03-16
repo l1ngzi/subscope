@@ -16,7 +16,7 @@ export const fetchAll = async (): Promise<number> => {
   const config = load()
   const store = createStore()
 
-  // Fetch all sources concurrently
+  // Fetch all sources concurrently — result carries its own source reference
   const results = await Promise.allSettled(
     config.sources.map(async (source) => {
       const adapter = resolve(source.url)
@@ -27,17 +27,15 @@ export const fetchAll = async (): Promise<number> => {
 
   let total = 0
   let newItems = 0
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i]!
-    const source = config.sources[i]!
+  for (const result of results) {
     if (result.status === 'fulfilled') {
-      const { items } = result.value
+      const { source, items } = result.value
       const added = store.save(items)
       total += items.length
       newItems += added
       console.log(`  ${source.name} — ${items.length} items${added > 0 ? ` (${added} new)` : ''}`)
     } else {
-      console.error(`  ${source.name} — failed: ${result.reason}`)
+      console.error(`  failed: ${result.reason}`)
     }
   }
 
@@ -64,17 +62,10 @@ export const read = (opts: ReadOpts = {}): { items: FeedItem[]; olderCount: numb
     ? undefined
     : (opts.since ?? new Date(Date.now() - TWO_WEEKS).toISOString())
 
-  // Query without limit, filter by active sources, then apply limit
-  const allItems = store
-    .query({ sourceType: opts.sourceType, since })
-    .filter(item => sourceIds.includes(item.sourceId))
-
+  const allItems = store.query({ sourceType: opts.sourceType, sourceIds, since })
   const items = opts.limit ? allItems.slice(0, opts.limit) : allItems
-
   const olderCount = since
-    ? store.query({ sourceType: opts.sourceType }).filter(item =>
-        sourceIds.includes(item.sourceId) && item.publishedAt < since
-      ).length
+    ? store.count({ sourceType: opts.sourceType, sourceIds, since })
     : 0
 
   store.close()

@@ -1,7 +1,7 @@
 import { parse, stringify } from 'yaml'
 import { join } from 'path'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs'
-import { DIR } from './lib.ts'
+import { DIR, groupMatches } from './lib.ts'
 import type { Source } from './types.ts'
 
 export type ModeName = 'formal' | 'quick' | string
@@ -128,11 +128,11 @@ export const activeSources = (config: Config, opts?: { group?: string; mode?: st
 
   return config.sources.filter(s => {
     if (!s.active) return false
-    if (opts?.group) return s.group === opts.group || s.group.startsWith(opts.group + '/')
-    if (!config.activeGroups.some(g => s.group === g || s.group.startsWith(g + '/'))) return false
+    if (opts?.group) return groupMatches(s.group, opts.group)
+    if (!config.activeGroups.some(g => groupMatches(s.group, g))) return false
     if (modeConfig) {
       if (modeConfig.types && !modeConfig.types.includes(s.type)) return false
-      if (modeConfig.groups && !modeConfig.groups.some(g => s.group === g || s.group.startsWith(g + '/'))) return false
+      if (modeConfig.groups && !modeConfig.groups.some(g => groupMatches(s.group, g))) return false
       return true
     }
     return true
