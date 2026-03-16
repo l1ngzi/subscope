@@ -18,6 +18,7 @@ import { fetchMOF } from './sites/mof.ts'
 import { fetchSAFE } from './sites/safe.ts'
 import { fetchNFRA } from './sites/nfra.ts'
 import { fetchCSRC } from './sites/csrc.ts'
+import { fetchNHK } from './sites/nhk.ts'
 import type { SourceAdapter, SourceType } from '../types.ts'
 
 // Site-specific adapters — matched by (hostname, pathPrefix)
@@ -40,6 +41,7 @@ const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[
   { host: 'safe.gov.cn', fetch: fetchSAFE },
   { host: 'nfra.gov.cn', fetch: fetchNFRA },
   { host: 'csrc.gov.cn', fetch: fetchCSRC },
+  { host: 'nhk.or.jp', path: '/nhkworld/', fetch: fetchNHK },
 ]
 
 const matchSite = (url: string): SourceAdapter['fetch'] | undefined => {

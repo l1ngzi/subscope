@@ -23,6 +23,7 @@ const DEFAULT_MODES: Record<string, ModeConfig> = {
   formal: { types: ['website'], groups: ['ai', 'photonics'] },
   quick: { types: ['youtube', 'twitter'] },
   eco: { groups: ['econ'] },
+  glob: { groups: ['news'] },
 }
 
 const CONFIG_FILE = join(DIR, 'config.yml')
@@ -130,6 +131,12 @@ export const inferGroup = (url: string): string => {
   if (hostname.includes('safe.gov.cn')) return 'econ/safe'
   if (hostname.includes('nfra.gov.cn')) return 'econ/nfra'
   if (hostname.includes('csrc.gov.cn')) return 'econ/csrc'
+  // Global news
+  if (hostname.includes('bbc.co.uk') || hostname.includes('bbc.com') || hostname.includes('bbci.co.uk')) return 'news/bbc'
+  if (hostname.includes('france24.com')) return 'news/france24'
+  if (hostname.includes('dw.com') || hostname.includes('dw.de')) return 'news/dw'
+  if (hostname.includes('nhk.or.jp')) return 'news/nhk'
+  if (hostname.includes('aljazeera.com')) return 'news/aljazeera'
   return hostname.replace('www.', '').split('.')[0]!
 }
 
