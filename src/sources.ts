@@ -14,9 +14,7 @@ const S = (url: string, group: string, type?: SourceType): SourceDef => ({ url, 
 
 export const SOURCE_REGISTRY: SourceDef[] = [
   // ── AI / Anthropic ──
-  S('https://www.anthropic.com/blog', 'ai/anthropic'),
-  S('https://www.anthropic.com/research', 'ai/anthropic'),
-  S('https://www.anthropic.com/engineering', 'ai/anthropic'),
+  S('https://www.anthropic.com', 'ai/anthropic'),  // fetches /blog + /research + /engineering in one call
   S('https://www.youtube.com/@anthropic-ai', 'ai/anthropic', 'youtube'),
   S('https://x.com/AnthropicAI', 'ai/anthropic', 'twitter'),
 
@@ -66,10 +64,8 @@ export const SOURCE_REGISTRY: SourceDef[] = [
   S('https://www.imf.org/en/News', 'econ/imf'),
 
   // ── News / China ──
-  S('https://news.cctv.com/world/', 'news/cctv'),
-  S('https://news.cctv.com/china/', 'news/cctv'),
-  S('http://www.news.cn/world/', 'news/xinhua'),
-  S('http://www.news.cn/china/', 'news/xinhua'),
+  S('https://news.cctv.com', 'news/cctv'),  // fetches world + china in one call
+  S('http://www.news.cn', 'news/xinhua'),  // fetches /world/ + /politics/ in one call
   S('http://world.people.com.cn/', 'news/people'),
 
   // ── News / Global ──

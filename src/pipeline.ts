@@ -53,7 +53,7 @@ export const fetchAll = async (opts?: {
       const t0 = Date.now()
       let result: FetchResult
       try {
-        const items = await retry(() => withTimeout(adapter.fetch(source), 15_000), 2, 300)
+        const items = await retry(() => withTimeout(adapter.fetch(source), 30_000), 2, 300)
         const added = store.save(items)
         newItems += added
         result = { name: source.name, count: items.length, added, ms: Date.now() - t0 }

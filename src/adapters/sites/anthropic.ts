@@ -4,20 +4,29 @@ import type { Source, FeedItem } from '../../types.ts'
 
 const BASE = 'https://www.anthropic.com'
 
+// Fetches all three sections (blog, research, engineering) in one adapter call.
+// Sequential requests to the same host reuse the TLS connection (~7s vs ~20s).
 export const fetchAnthropic = async (source: Source): Promise<FeedItem[]> => {
-  const html = await fetch(source.url).then(r => r.text())
+  const pages = ['/blog', '/research', '/engineering']
+  const items: FeedItem[] = []
 
-  if (source.url.includes('/engineering')) {
-    return parseEngineering(html, source)
+  for (const path of pages) {
+    const html = await fetch(`${BASE}${path}`).then(r => r.text())
+    if (path === '/engineering') {
+      items.push(...parseEngineering(html, source))
+    } else {
+      items.push(...parseRSC(html, source, path))
+    }
   }
-  return parseRSC(html, source)
+
+  return sortDesc(items)
 }
 
 // /blog, /research: data lives in RSC JSON payload
-const parseRSC = (html: string, source: Source): FeedItem[] => {
+const parseRSC = (html: string, source: Source, path: string): FeedItem[] => {
   const items: FeedItem[] = []
   const seen = new Set<string>()
-  const pathPrefix = source.url.includes('/research') ? '/research/' : '/news/'
+  const pathPrefix = path === '/research' ? '/research/' : '/news/'
 
   let pos = 0
   while ((pos = html.indexOf('publishedOn', pos + 1)) !== -1) {
@@ -42,7 +51,7 @@ const parseRSC = (html: string, source: Source): FeedItem[] => {
     }))
   }
 
-  return sortDesc(items)
+  return items
 }
 
 // /engineering: rendered HTML with <article> elements
@@ -69,7 +78,7 @@ const parseEngineering = (html: string, source: Source): FeedItem[] => {
   const fallbackBase = firstDated ? new Date(firstDated.dateText).getTime() : Date.now()
   let undatedOffset = 0
 
-  return sortDesc(articles.map(a => {
+  return articles.map(a => {
     const publishedAt = a.dateText
       ? new Date(a.dateText).toISOString()
       : new Date(fallbackBase + ++undatedOffset * 1000).toISOString()
@@ -77,7 +86,7 @@ const parseEngineering = (html: string, source: Source): FeedItem[] => {
       summary: a.summary || undefined,
       publishedAt,
     })
-  }))
+  })
 }
 
 const clean = (s: string) =>
