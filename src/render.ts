@@ -50,8 +50,34 @@ const sourceColor = (name: string, _type: string, group?: string): string => {
 const cols = () => process.stdout.columns || 80
 const rows = () => process.stdout.rows || 24
 
-const truncate = (text: string, max: number) =>
-  text.length <= max ? text : text.slice(0, max - 1) + '\u2026'
+const isWide = (cp: number): boolean =>
+  (cp >= 0x1100 && cp <= 0x115f) ||
+  (cp >= 0x2e80 && cp <= 0xa4cf && cp !== 0x303f) ||
+  (cp >= 0xac00 && cp <= 0xd7a3) ||
+  (cp >= 0xf900 && cp <= 0xfaff) ||
+  (cp >= 0xfe10 && cp <= 0xfe19) ||
+  (cp >= 0xfe30 && cp <= 0xfe6b) ||
+  (cp >= 0xff01 && cp <= 0xff60) ||
+  (cp >= 0xffe0 && cp <= 0xffe6) ||
+  (cp >= 0x20000 && cp <= 0x3fffd)
+
+const displayWidth = (s: string): number => {
+  let w = 0
+  for (const ch of s) w += isWide(ch.codePointAt(0)!) ? 2 : 1
+  return w
+}
+
+const truncate = (text: string, max: number) => {
+  if (displayWidth(text) <= max) return text
+  let w = 0, result = ''
+  for (const ch of text) {
+    const cw = isWide(ch.codePointAt(0)!) ? 2 : 1
+    if (w + cw > max - 1) return result + '\u2026'
+    w += cw
+    result += ch
+  }
+  return result + '\u2026'
+}
 
 const clean = (s: string) =>
   s.replace(/<[^>]*>/g, '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
