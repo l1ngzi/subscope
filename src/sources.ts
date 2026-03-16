@@ -95,7 +95,6 @@ export const SOURCE_REGISTRY: SourceDef[] = [
   S('https://news.un.org/feed/subscribe/en/news/all/rss.xml', 'intl/un'),
   S('https://www.who.int/rss-feeds/news-english.xml', 'intl/who'),
   S('https://www.iaea.org/newscenter/pressreleases', 'intl/iaea'),
-  S('https://www.wto.org/english/news_e/news_e.htm', 'intl/wto'),
 
   // ── Regulation (TODO: EU Commission and FTC need dedicated adapters) ──
 ]

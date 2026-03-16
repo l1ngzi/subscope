@@ -35,9 +35,11 @@ export const readArticle = async (url: string): Promise<{ title: string; text: s
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return res.text()
     }, 3, 500)
-    // Angular SPA: detect unrendered template and retry with Playwright networkidle
+    // SPA detection: Angular templates or large HTML with no <p> content
     if (html.includes('{{data.') && html.includes('ng-controller')) {
       html = fetchWithBrowser(url, 'networkidle')
+    } else if (html.length > 10000 && !/<p[\s>]/i.test(html)) {
+      html = fetchWithBrowser(url)
     }
   } catch {
     // Fallback 1: RSS feed content

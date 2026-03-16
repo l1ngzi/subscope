@@ -105,4 +105,22 @@ export const econRules: SiteRule[] = [
     title: 'main#contents h1, h1',
     cleanTitle: t => t.replace(/\s*\[Speech\]\s*/i, '').replace(/\s*[-–—]\s*Bank of Japan$/, '').trim(),
   },
+  {
+    test: u => u.includes('eia.gov'),
+    selector: '.l-body-wrapper',
+    title: 'title',
+    cleanTitle: t => t.replace(/\s*[-–—]\s*(U\.S\. Energy|Today in Energy|EIA).*$/, '').trim(),
+  },
+  {
+    test: u => u.includes('iea.org'),
+    selector: 'article, main',
+    title: 'h1',
+    cleanTitle: t => t.replace(/\s*[-–—|]\s*IEA$/, '').trim(),
+  },
+  {
+    test: u => u.includes('iaea.org'),
+    selector: 'article, .field--name-body',
+    title: 'h1',
+    cleanTitle: t => t.replace(/\s*\|\s*IAEA$/, '').trim(),
+  },
 ]
