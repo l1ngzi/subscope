@@ -114,7 +114,7 @@ const formatItem = (
   }
   const srcName = formatSourceName(feedItem.sourceName)
   lines.push(`${bg} ${color}\u2502${RESET}  ${color}${srcName}${RESET} ${GRAY}\u00b7 ${timeAgo(feedItem.publishedAt)}${RESET}`)
-  lines.push(`${bg} ${color}\u2502${RESET}  ${DIM}\u2192 ${feedItem.url}${RESET}`)
+  lines.push(`${bg} ${color}\u2502${RESET}  ${DIM}\u2192 ${truncate(feedItem.url, maxWidth - 2)}${RESET}`)
   lines.push('')
   return lines
 }
