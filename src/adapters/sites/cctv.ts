@@ -24,8 +24,10 @@ export const fetchCCTV = async (source: Source): Promise<FeedItem[]> => {
   const jsonStr = text.replace(/^[^(]*\(/, '').replace(/\);?\s*$/, '')
   const json = JSON.parse(jsonStr) as { data: { list: CCTVItem[] } }
 
-  return sortDesc(json.data.list.map(n => item(source, n.url, n.title, {
-    summary: n.brief?.slice(0, 200),
-    publishedAt: n.focus_date ? new Date(n.focus_date + '+08:00').toISOString() : undefined,
-  })))
+  return sortDesc(json.data.list
+    .filter(n => (n.brief?.length ?? 0) >= 30)
+    .map(n => item(source, n.url, n.title, {
+      summary: n.brief?.slice(0, 200),
+      publishedAt: n.focus_date ? new Date(n.focus_date + '+08:00').toISOString() : undefined,
+    })))
 }
