@@ -38,7 +38,7 @@ src/
     index.ts                Adapter registry: URL -> adapter resolution
     website.ts              Generic: RSS auto-detect, HTML scrape fallback
     youtube.ts              Scrapes ytInitialData from channel page
-    twitter.ts              Native X GraphQL API (UserByScreenName + UserTweets)
+    twitter.ts              X syndication API (primary) + GraphQL fallback
     github.ts               GitHub Atom release feeds
     sites/
       anthropic.ts          RSC JSON payload parser (blog/research/engineering)
@@ -57,12 +57,17 @@ src/
       mof.ts                Ministry of Finance news scraper (财政部)
       safe.ts               State Administration of Foreign Exchange scraper (外汇管理局)
       nfra.ts               National Financial Regulatory Administration (Playwright for Angular SPA)
+      boj.ts                Bank of Japan speeches/press HTML scraper
+      apnews.ts             AP News hub page scraper (date from URL slug)
+      iaea.ts               IAEA press releases scraper
+      wto.ts                WTO news scraper
+  sources.ts                Hardcoded source registry (all URLs + groups)
   reader/
     index.ts                Article full-text extractor (core logic + Playwright fallback)
     types.ts                SiteRule interface
-    econ.ts                 13 economics/finance site reader rules
-    news.ts                 12 news media site reader rules
-    ai.ts                   8 AI company + GitHub reader rules
+    econ.ts                 Economics/finance/energy/intl site reader rules
+    news.ts                 News media site reader rules
+    ai.ts                   AI company + GitHub reader rules
 ```
 
 ## Key architectural decisions
@@ -71,7 +76,7 @@ src/
 Each source URL resolves to an adapter via `index.ts`. Site-specific adapters (in `sites/`) match by hostname. Generic adapters (website, youtube, twitter, github) match by URL pattern. Website adapter is the fallback.
 
 ### X/Twitter approach
-Uses the web app's public bearer token + user's auth_token cookie to call GraphQL endpoints directly. No intermediate APIs. Thread merging via `conversation_id_str` with reply-chain walking as fallback. Session (ct0 CSRF token) cached across all X sources in one fetch cycle.
+Primary: syndication API (`syndication.twitter.com/srv/timeline-profile`) — public embed endpoint, no auth needed, ~0.7s/source, returns ~20 tweets with full thread data via `__NEXT_DATA__` JSON. Fallback: GraphQL API with auth_token cookie (session mutex, user ID cache in `x-uid-cache.json`). Thread merging via `conversation_id_str` with reply-chain walking.
 
 ### YouTube approach
 Fetches `/@handle/videos` page, parses `ytInitialData` JSON from the HTML. Relative dates ("2 weeks ago") converted to ISO timestamps. No API key needed.
@@ -100,8 +105,8 @@ Seventeen sources under the `news/` group: BBC (RSS), France24 (RSS), DW (RSS), 
 ### Article reader (`subscope read`)
 Pipe-friendly full-text extractor for LLM consumption. Output: `# Title\n\ntext`. Per-site CSS selectors for all blog-type sources:
 - **AI**: Anthropic (CSS modules `Body-module`), Claude blog (`.u-rich-text-blog`), Claude Support (`.article_body`), OpenAI (`article`), DeepMind (`main`), DeepSeek (`.theme-doc-markdown`), xAI (`.prose.prose-invert`)
-- **Econ**: Fed (`#article .col-sm-8`), ECB (`main .section`), PBOC (`#zoom`), NBS (`.txt-content`), BLS (Playwright + Chrome anti-detection), BEA (`.field--name-body`), Treasury (`og:description` meta), IMF (`article .column-padding` via Playwright), SEC EDGAR (auto-follow `-index.htm` → document, company name from submissions API), CSRC (`.detail-news`), MOF (`.xwfb_content`), SAFE (`.detail_content`), NFRA (Angular auto-detect → Playwright networkidle)
-- **News**: BBC (`data-component` text blocks), France24 (`.t-content__body`), DW (`.rich-text`), NHK (generic fallback), Al Jazeera (`.wysiwyg`), TASS (`.text-content`), Yonhap (`article.story-news > p`), ABC Australia (`engagement_target`), CBC (`.story > p/h2`), People's Daily (`.rm_txt_con`), CCTV (`.content_area`), Xinhua (`#detailContent`)
+- **Econ**: Fed (`#article .col-sm-8`), ECB (`main .section`), PBOC (`#zoom`), BOJ (`div.outline`), NBS (`.txt-content`), BLS (Playwright + Chrome anti-detection), BEA (`.field--name-body`), Treasury (`og:description` meta), IMF (`article .column-padding` via Playwright), SEC EDGAR (auto-follow `-index.htm` → document, company name from submissions API), CSRC (`.detail-news`), MOF (`.xwfb_content`), SAFE (`.detail_content`), NFRA (Angular auto-detect → Playwright networkidle), EIA (`.tie-article`), IEA (`article`), IAEA (`article, .field--name-body`), WTO (`.centerCol`)
+- **News**: BBC (`data-component` text blocks), France24 (`.t-content__body`), DW (`.rich-text`), NHK (generic fallback), Al Jazeera (`.wysiwyg`), TASS (`.text-content`), Yonhap (`article.story-news > p`), AP News (`.RichTextStoryBody`), ABC Australia (`engagement_target`), CBC (`.story > p/h2`), Focus Taiwan (`.PrimarySide .paragraph`), The Hindu (`.articlebodycontent`), People's Daily (`.rm_txt_con`), CCTV (`.content_area`), Xinhua (`#detailContent`)
 - **Other**: GitHub releases (`[data-test-selector="body-content"]`)
 - Anti-bot bypass: Playwright spawns system Chrome with `--disable-blink-features=AutomationControlled`, `navigator.webdriver=false`, `--ignore-certificate-errors`
 - Tables: colspan/rowspan grid extraction, compound headers flattened to `Group: Column` format
@@ -167,7 +172,7 @@ When a commit changes functionality, immediately follow with a separate docs com
 
 ## Platform notes
 
-- Bun + Playwright doesn't work on Windows (pipe communication bug, oven-sh/bun#27977). That's why X uses native GraphQL instead. Playwright is used via `node -e` subprocess for article reading (BLS, IMF, NFRA) and feed fetching (NFRA) — not through Bun directly. `fetchWithBrowser` supports `waitUntil` parameter (`domcontentloaded` default, `networkidle` for Angular SPAs).
+- Bun + Playwright doesn't work on Windows (pipe communication bug, oven-sh/bun#27977). Playwright is used via `node -e` subprocess for article reading (BLS, IMF, NFRA) and feed fetching (NFRA) — not through Bun directly. `fetchWithBrowser` supports `waitUntil` parameter (`domcontentloaded` default, `networkidle` for Angular SPAs).
 - Windows toast notifications via PowerShell inline script.
 - Clipboard read via `powershell Get-Clipboard`.
 - `cmd /c start` to open URLs in default browser.
