@@ -39,7 +39,6 @@ export const SOURCE_REGISTRY: SourceDef[] = [
 
   // ── AI / DeepSeek ──
   S('https://api-docs.deepseek.com/updates', 'ai/deepseek'),
-  S('https://github.com/deepseek-ai', 'ai/deepseek'),
   S('https://x.com/deepseek_ai', 'ai/deepseek', 'twitter'),
 
   // ── AI / xAI ──
