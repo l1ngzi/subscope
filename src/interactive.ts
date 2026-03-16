@@ -52,6 +52,7 @@ export const interactiveConfig = (): Promise<void> => {
   const nav: { path: string; cursor: number }[] = [{ path: '', cursor: 0 }]
   let mode: Mode = { kind: 'folders' }
   let dirty = false
+  let filteredCatalog: CatalogEntry[] = []
 
   const cur = () => nav[nav.length - 1]!
 
@@ -90,10 +91,6 @@ export const interactiveConfig = (): Promise<void> => {
   const isActive = (path: string) =>
     cfg.activeGroups.some(g => groupMatches(g, path))
 
-  const sourceCount = (path: string) => {
-    return cfg.sources.filter(s => groupMatches(s.group, path))
-  }
-
   // ── Folder rows ──
 
   type Row = { kind: 'label' | 'gap' | 'mode' | 'folder' | 'source'; key?: string; text: string; active?: boolean }
@@ -111,7 +108,7 @@ export const interactiveConfig = (): Promise<void> => {
     const folders = childFolders(p)
     for (const f of folders) {
       const full = p ? `${p}/${f}` : f
-      const all = sourceCount(full)
+      const all = sourcesIn(full)
       const on = all.filter(s => s.active).length
       r.push({ kind: 'folder', key: full, text: `${f}  ${DIM}${on}/${all.length}${RESET}`, active: isActive(full) })
     }
@@ -224,7 +221,7 @@ export const interactiveConfig = (): Promise<void> => {
       }
       if (filtered.length === 0) lines.push(`  ${DIM}No matches${RESET}`)
       // Store filtered list for key handler
-      ;(mode as any)._filtered = filtered
+      filteredCatalog = filtered
       render(lines, '\u2191\u2193 select  enter confirm  q cancel')
 
     } else if (mode.kind === 'text') {
@@ -339,7 +336,7 @@ export const interactiveConfig = (): Promise<void> => {
 
       // ── CATALOG ──
       if (mode.kind === 'catalog') {
-        const filtered: CatalogEntry[] = (mode as any)._filtered ?? []
+        const filtered = filteredCatalog
         if (up) { mode.cursor = Math.max(0, mode.cursor - 1); draw(); return }
         if (down) { mode.cursor = Math.min(filtered.length - 1, mode.cursor + 1); draw(); return }
         if (enter) {

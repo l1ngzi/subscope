@@ -17,27 +17,25 @@ const NEW_BADGE = `\x1b[48;5;22m\x1b[38;5;46m NEW ${RESET}`
 
 const c = (n: number) => `\x1b[38;5;${n}m`
 
-// ── Source color mapping ──
+// ── Source color ──
 
-const sourceColor = (name: string, type: string, group?: string): string => {
-  const g = group?.toLowerCase() ?? ''
-  const n = name.toLowerCase()
-  if (g === 'anthropic' || n.includes('anthropic')) return c(208)
-  if (g === 'claude' || n.includes('claude') || n.includes('support')) return c(216)
-  if (g === 'openai' || n.includes('openai')) return c(114)
-  if (g === 'deepmind' || n.includes('deepmind') || n.includes('googledeepmind')) return c(75)
-  if (g === 'deepseek' || n.includes('deepseek')) return c(80)
-  if (g === 'xai' || n.includes('x.ai') || n.includes('/xai') || n.includes('grok')) return c(231)
-  if (n.includes('github')) return c(248)
-  if (g.startsWith('econ/fed') || n.includes('federalreserve')) return c(39)
-  if (g.startsWith('econ/pboc') || n.includes('pbc.gov')) return c(160)
-  if (g.startsWith('econ/nbs') || n.includes('stats.gov')) return c(178)
-  if (g.startsWith('econ/sec') || n.includes('efts.sec') || n.includes('edgar')) return c(27)
-  if (g.startsWith('econ/bls') || n.includes('bls.gov')) return c(107)
-  if (g.startsWith('econ/bea') || n.includes('bea.gov')) return c(107)
-  if (g.startsWith('econ/ecb') || n.includes('ecb.europa')) return c(33)
-  if (g.startsWith('econ/treasury') || n.includes('treasury')) return c(220)
-  if (g.startsWith('econ/imf') || n.includes('imf.org')) return c(75)
+const BRAND: [string, number][] = [
+  ['anthropic', 208], ['claude', 216],
+  ['openai', 114], ['deepmind', 75], ['deepseek', 80],
+  ['xai', 231], ['x.ai', 231], ['grok', 231],
+  ['github', 248],
+  ['fed', 39], ['federalreserve', 39],
+  ['pboc', 160], ['pbc.gov', 160],
+  ['nbs', 178], ['stats.gov', 178],
+  ['sec', 27], ['edgar', 27],
+  ['bls', 107], ['bea', 107],
+  ['ecb', 33], ['treasury', 220], ['imf', 75],
+]
+
+const sourceColor = (name: string, _type: string, group?: string): string => {
+  const key = ((group ?? '') + ' ' + name).toLowerCase()
+  for (const [match, color] of BRAND)
+    if (key.includes(match)) return c(color)
   return c(141)
 }
 
@@ -52,21 +50,23 @@ const truncate = (text: string, max: number) =>
 const clean = (s: string) =>
   s.replace(/<[^>]*>/g, '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
 
+const DISPLAY: [string, string][] = [
+  ['federalreserve.gov', 'Federal Reserve'],
+  ['pbc.gov.cn', '\u4e2d\u56fd\u4eba\u6c11\u94f6\u884c'],
+  ['stats.gov.cn', '\u56fd\u5bb6\u7edf\u8ba1\u5c40'],
+  ['efts.sec.gov', 'SEC EDGAR'], ['sec.gov', 'SEC EDGAR'],
+  ['bls.gov', 'BLS'], ['bea.gov', 'BEA'], ['ecb.europa', 'ECB'],
+  ['treasury.gov', 'US Treasury'], ['imf.org', 'IMF'],
+]
+
 const formatSourceName = (name: string): string => {
   if (!name) return 'unknown'
   if (name.startsWith('support.claude')) {
     const slug = name.split('/').pop()?.replace(/^\d+-/, '') ?? 'support'
     return `Claude Support \u00b7 ${slug}`
   }
-  if (name.includes('federalreserve.gov')) return 'Federal Reserve'
-  if (name.includes('pbc.gov.cn')) return '\u4e2d\u56fd\u4eba\u6c11\u94f6\u884c'
-  if (name.includes('stats.gov.cn')) return '\u56fd\u5bb6\u7edf\u8ba1\u5c40'
-  if (name.includes('efts.sec.gov') || name.includes('sec.gov')) return 'SEC EDGAR'
-  if (name.includes('bls.gov')) return 'BLS'
-  if (name.includes('bea.gov')) return 'BEA'
-  if (name.includes('ecb.europa')) return 'ECB'
-  if (name.includes('treasury.gov')) return 'US Treasury'
-  if (name.includes('imf.org')) return 'IMF'
+  for (const [match, display] of DISPLAY)
+    if (name.includes(match)) return display
   const parts = name
     .replace(/\.(com|org|net|io|ai|dev)/, '')
     .split('/')
@@ -156,8 +156,7 @@ export const renderInteractive = (allItems: FeedItem[], olderCount = 0, hasSourc
     renderFeed(allItems, olderCount, hasSources)
     return Promise.resolve()
   }
-  const MIN_INTERACTIVE_ITEMS = 3
-  if (allItems.length <= MIN_INTERACTIVE_ITEMS) {
+  if (allItems.length <= 3) {
     console.log()
     const maxWidth = cols() - 4
     for (const i of allItems) for (const line of formatItem(i, maxWidth)) console.log(line)

@@ -221,84 +221,82 @@ export const readArticle = async (url: string): Promise<{ title: string; text: s
   return { title, text: extractText($body, $) }
 }
 
+// ── Table extraction ──
+
+const tableToMarkdown = ($: cheerio.CheerioAPI, node: any): string => {
+  const trs = $(node).find('tr').toArray()
+  const grid: string[][] = []
+  const spanned = new Set<string>()
+
+  for (let r = 0; r < trs.length; r++) {
+    if (!grid[r]) grid[r] = []
+    let col = 0
+    $(trs[r]!).find('th, td').each((_, cell) => {
+      while (spanned.has(`${r},${col}`)) col++
+      const text = $(cell).text().replace(/\s+/g, ' ').trim()
+      const cs = parseInt($(cell).attr('colspan') || '1', 10)
+      const rs = parseInt($(cell).attr('rowspan') || '1', 10)
+      for (let dr = 0; dr < rs; dr++)
+        for (let dc = 0; dc < cs; dc++) {
+          if (!grid[r + dr]) grid[r + dr] = []
+          grid[r + dr]![col + dc] = (dr === 0 && dc === 0) ? text : ''
+          if (dr > 0 || dc > 0) spanned.add(`${r + dr},${col + dc}`)
+        }
+      col += cs
+    })
+  }
+
+  const rows = grid.filter(r => r?.some(c => c?.trim()))
+  if (!rows.length) return ''
+  const cols = Math.max(...rows.map(r => r.length))
+  for (const row of rows) { while (row.length < cols) row.push(''); row.splice(cols) }
+
+  // Header/data boundary: first row where >1/3 of cells look numeric
+  const isNumeric = (r: string[]) =>
+    r.filter(c => /^-?[\d,.]+%?$/.test((c ?? '').replace(/[()p]/g, ''))).length > r.length / 3
+  let split = rows.findIndex(isNumeric)
+  if (split < 0) split = rows.length > 2 ? 2 : 1
+
+  // Flatten compound headers ("Group: Column")
+  const header: string[] = Array(cols).fill('')
+  if (split <= 1) {
+    for (let c = 0; c < cols; c++) header[c] = (rows[0]![c] ?? '').trim()
+  } else {
+    const groups: string[] = Array(cols).fill('')
+    for (let r = 0; r < split - 1; r++) {
+      let span = ''
+      for (let c = 0; c < cols; c++) {
+        const val = (rows[r]![c] ?? '').trim()
+        if (val) span = val
+        else if (span && !groups[c]) groups[c] = span
+        if (val) groups[c] = val
+      }
+    }
+    const bottom = rows[split - 1]!
+    for (let c = 0; c < cols; c++) {
+      const sub = (bottom[c] ?? '').trim()
+      const grp = groups[c]
+      header[c] = sub && grp && sub !== grp ? `${grp}: ${sub}` : sub || grp || ''
+    }
+  }
+
+  const data = [header, ...rows.slice(split)]
+  const widths: number[] = Array(cols).fill(0)
+  for (const row of data)
+    for (let i = 0; i < row.length; i++)
+      widths[i] = Math.max(widths[i]!, (row[i] ?? '').length)
+
+  const fmt = (row: string[]) =>
+    '| ' + row.map((c, i) => (c ?? '').padEnd(widths[i]!)).join(' | ') + ' |'
+  const sep = '|' + widths.map(w => '-'.repeat(w + 2)).join('|') + '|'
+
+  return '\n' + fmt(data[0]!) + '\n' + sep + '\n' + data.slice(1).map(fmt).join('\n') + '\n\n'
+}
+
 // ── Text extraction ──
 
 const extractText = ($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): string => {
   const blocks: string[] = []
-
-  const renderTable = (node: any) => {
-    const trs = $(node).find('tr').toArray()
-    const grid: string[][] = []
-    const occupied = new Set<string>()
-
-    for (let r = 0; r < trs.length; r++) {
-      if (!grid[r]) grid[r] = []
-      let col = 0
-      $(trs[r]!).find('th, td').each((_, cell) => {
-        while (occupied.has(`${r},${col}`)) col++
-        const text = $(cell).text().replace(/\s+/g, ' ').trim()
-        const colspan = parseInt($(cell).attr('colspan') || '1', 10)
-        const rowspan = parseInt($(cell).attr('rowspan') || '1', 10)
-        for (let dr = 0; dr < rowspan; dr++) {
-          for (let dc = 0; dc < colspan; dc++) {
-            const gr = r + dr, gc = col + dc
-            if (!grid[gr]) grid[gr] = []
-            grid[gr]![gc] = (dr === 0 && dc === 0) ? text : ''
-            if (dr > 0 || dc > 0) occupied.add(`${gr},${gc}`)
-          }
-        }
-        col += colspan
-      })
-    }
-
-    const rows = grid.filter(r => r && r.some(c => c?.trim()))
-    if (!rows.length) return
-    const colCount = Math.max(...rows.map(r => r.length))
-    for (const row of rows) { while (row.length < colCount) row.push(''); row.splice(colCount) }
-
-    // Find data start: first row where >1/3 of cells are numeric (e.g. "1,234", "-5.6%", "(0.3)")
-    const NUMERIC_THRESHOLD = 1 / 3
-    const isNumRow = (r: string[]) => r.filter(c => /^-?[\d,.]+%?$/.test((c ?? '').replace(/[()p]/g, ''))).length > r.length * NUMERIC_THRESHOLD
-    let dataStart = rows.findIndex(r => isNumRow(r))
-    if (dataStart < 0) dataStart = rows.length > 2 ? 2 : 1
-
-    // Flatten multi-row headers: "GroupName: SubColumn"
-    const header: string[] = Array(colCount).fill('')
-    if (dataStart <= 1) {
-      for (let c = 0; c < colCount; c++) header[c] = (rows[0]![c] ?? '').trim()
-    } else {
-      const groups: string[] = Array(colCount).fill('')
-      for (let r = 0; r < dataStart - 1; r++) {
-        let lastGroup = ''
-        for (let c = 0; c < colCount; c++) {
-          const val = (rows[r]![c] ?? '').trim()
-          if (val) lastGroup = val
-          else if (lastGroup && !groups[c]) groups[c] = lastGroup
-          if (val) groups[c] = val
-        }
-      }
-      const lastHeaderRow = rows[dataStart - 1]!
-      for (let c = 0; c < colCount; c++) {
-        const sub = (lastHeaderRow[c] ?? '').trim()
-        const group = groups[c]
-        header[c] = sub && group && sub !== group ? `${group}: ${sub}` : sub || group || ''
-      }
-    }
-
-    const finalRows = [header, ...rows.slice(dataStart)]
-    const widths: number[] = Array(colCount).fill(0)
-    for (const row of finalRows)
-      for (let i = 0; i < row.length; i++)
-        widths[i] = Math.max(widths[i]!, (row[i] ?? '').length)
-
-    const pad = (s: string, w: number) => s + ' '.repeat(Math.max(0, w - s.length))
-    const fmtRow = (row: string[]) => '| ' + row.map((c, i) => pad(c ?? '', widths[i]!)).join(' | ') + ' |'
-
-    blocks.push('\n', fmtRow(finalRows[0]!), '\n')
-    blocks.push('|' + widths.map(w => '-'.repeat(w + 2)).join('|') + '|', '\n')
-    for (let i = 1; i < finalRows.length; i++) blocks.push(fmtRow(finalRows[i]!), '\n')
-    blocks.push('\n')
-  }
 
   const walk = (node: any) => {
     if (node.type === 'text') {
@@ -309,7 +307,7 @@ const extractText = ($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): string =
     if (node.type !== 'tag') return
     const tag = node.name?.toLowerCase()
     if (['script', 'style', 'nav', 'footer', 'img', 'svg', 'iframe'].includes(tag)) return
-    if (tag === 'table') { renderTable(node); return }
+    if (tag === 'table') { const md = tableToMarkdown($, node); if (md) blocks.push(md); return }
 
     const isBlock = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'section', 'article'].includes(tag)
     const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)
