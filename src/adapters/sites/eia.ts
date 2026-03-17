@@ -4,21 +4,19 @@ import type { Source, FeedItem } from '../../types.ts'
 
 const BASE = 'https://www.eia.gov/todayinenergy/'
 
+// EIA blocks Bun's TLS but cffi passes. RSS is 15KB vs 90KB HTML.
 export const fetchEIA = async (source: Source): Promise<FeedItem[]> => {
-  const $ = cheerio.load(await fetchWithCffi(source.url))
+  const $ = cheerio.load(await fetchWithCffi(source.url), { xml: true })
   const items: FeedItem[] = []
 
-  $('.tie-article').each((_, el) => {
-    const $a = $(el).find('h1 a, h2 a')
-    const title = $a.text().trim()
-    const href = $a.attr('href')
-    if (!title || !href) return
+  $('item').each((_, el) => {
+    const title = $(el).find('title').text().trim()
+    const link = $(el).find('link').text().trim()
+    const pubDate = $(el).find('pubDate').text().trim()
+    if (!title || !link) return
 
-    const url = href.startsWith('http') ? href : `${BASE}${href}`
-    const dateText = $(el).find('.date').text().trim()
-
-    items.push(item(source, url, title, {
-      publishedAt: dateText ? new Date(dateText).toISOString() : undefined,
+    items.push(item(source, link, title, {
+      publishedAt: pubDate ? new Date(pubDate).toISOString() : undefined,
     }))
   })
 

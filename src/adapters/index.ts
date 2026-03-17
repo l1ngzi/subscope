@@ -59,7 +59,7 @@ const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[
   { host: 'news.cn', fetch: fetchXinhua },
   { host: 'boj.or.jp', fetch: fetchBOJ },
   { host: 'apnews.com', fetch: fetchAPNews },
-  { host: 'eia.gov', fetch: fetchEIA },
+  { host: 'eia.gov', path: '/rss/', fetch: fetchEIA },
   { host: 'iaea.org', path: '/newscenter/', fetch: fetchIAEA },
   { host: 'wto.org', fetch: fetchWTO },
   { host: 'ftc.gov', fetch: fetchFTC },
