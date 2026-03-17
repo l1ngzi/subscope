@@ -9,6 +9,7 @@ import { interactiveConfig } from './interactive.ts'
 import { notify } from './notify.ts'
 import { readArticle } from './reader/index.ts'
 import { DIR, groupMatches } from './lib.ts'
+import { startServer, getServerPort, proxyFetch } from './serve.ts'
 
 import { join } from 'path'
 import { homedir } from 'os'
@@ -59,6 +60,34 @@ const commands: Record<string, () => Promise<void>> = {
     const silent = args.includes('--notify')
 
     const start = Date.now()
+
+    // Try proxying to running server (warm connections)
+    const serverPort = getServerPort()
+    if (serverPort) {
+      const proxied = await proxyFetch(serverPort, { group })
+      if (proxied) {
+        const { newItems, results } = proxied
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1)
+        if (silent) {
+          if (newItems > 0) notify('subscope', `${newItems} new item${newItems > 1 ? 's' : ''}`)
+        } else {
+          for (const r of results) {
+            const sec = (r.ms / 1000).toFixed(1)
+            const slow = r.ms > 5000 ? ` \x1b[33m${sec}s\x1b[0m` : ` \x1b[2m${sec}s\x1b[0m`
+            if (r.error) {
+              console.log(`  \x1b[31m✗\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.error}\x1b[0m${slow}`)
+            } else {
+              const tag = r.added > 0 ? ` \x1b[32m(${r.added} new)\x1b[0m` : ''
+              console.log(`  ${formatSourceName(r.name)} \x1b[2m— ${r.count}\x1b[0m${tag}${slow}`)
+            }
+          }
+          console.log(`\n  \x1b[1m${results.length} sources · ${elapsed}s · ${newItems} new \x1b[36m⚡serve\x1b[0m\x1b[0m\n`)
+        }
+        return
+      }
+    }
+
+    // Direct fetch (cold)
     const sourceCount = (group
       ? config.sources.filter(s => s.active !== false && (s.group === group || s.group.startsWith(group + '/')))
       : config.sources
@@ -126,6 +155,51 @@ Write-Output "ok"
     } else {
       console.error('\n  Failed to create scheduled task. Try running as administrator.\n')
     }
+  },
+
+  serve: async () => {
+    const sub = args[0]
+
+    if (sub === 'stop') {
+      const port = getServerPort()
+      if (!port) { console.log('\n  Server is not running.\n'); return }
+      try {
+        await fetch(`http://127.0.0.1:${port}/stop`)
+        console.log('\n  Server stopped.\n')
+      } catch {
+        console.log('\n  Server not responding. Cleaned up.\n')
+      }
+      return
+    }
+
+    if (sub === 'status') {
+      const port = getServerPort()
+      if (!port) { console.log('\n  Server is not running.\n'); return }
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/health`)
+        const data = await res.json() as any
+        console.log(`\n  Server running on port ${port}`)
+        console.log(`  PID ${data.pid} · uptime ${Math.floor(data.uptime)}s\n`)
+      } catch {
+        console.log('\n  Server not responding (stale port file).\n')
+      }
+      return
+    }
+
+    // Default: start server
+    const port = parseInt(sub ?? '0') || 0
+    const existing = getServerPort()
+    if (existing) {
+      try {
+        await fetch(`http://127.0.0.1:${existing}/health`)
+        console.log(`\n  Server already running on port ${existing}.\n`)
+        return
+      } catch {
+        // Stale port file, start fresh
+      }
+    }
+    startServer(port)
+    await new Promise(() => {}) // keep alive
   },
 
   'watch-uninstall': async () => {

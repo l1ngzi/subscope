@@ -23,6 +23,7 @@ export interface FetchResult {
 
 export const fetchAll = async (opts?: {
   group?: string
+  concurrency?: number
   onResult?: (result: FetchResult, done: number, total: number) => void
 }): Promise<{ newItems: number; results: FetchResult[] }> => {
   const config = load()
@@ -35,8 +36,8 @@ export const fetchAll = async (opts?: {
   const results: FetchResult[] = []
   let newItems = 0
 
-  // 12 concurrent workers — queue-based semaphore avoids DNS/TLS congestion
-  const CONCURRENCY = 12
+  // Queue-based semaphore — 12 default (cold), higher when connections are warm (serve mode)
+  const CONCURRENCY = opts?.concurrency ?? 12
   const queue = [...sources]
   const workers: Promise<void>[] = []
 
