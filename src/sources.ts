@@ -91,6 +91,7 @@ export const SOURCE_REGISTRY: SourceDef[] = [
   S('https://apnews.com/hub/world-news', 'news/ap'),
   S('https://feeds.feedburner.com/rsscna/engnews/', 'news/focustw'),
   S('https://www.thehindu.com/news/international/feeder/default.rss', 'news/thehindu'),
+  S('https://www.aa.com.tr/en/rss/default?cat=world', 'news/aa'),
 
   // ── Energy ──
   S('https://www.iea.org/news', 'energy/iea'),

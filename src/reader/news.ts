@@ -126,6 +126,12 @@ export const newsRules: SiteRule[] = [
     },
   },
   {
+    test: u => u.includes('aa.com.tr'),
+    selector: '.detay-icerik, article',
+    title: 'h1',
+    cleanTitle: t => t.replace(/\s*[|–—]\s*Anadolu Aj?[ae]n[sc][ıi].*$/, '').trim(),
+  },
+  {
     test: u => u.includes('nhk.or.jp') || u.includes('nhk.jp'),
     selector: '.p-detail__body, article, main',
     title: 'h1',
