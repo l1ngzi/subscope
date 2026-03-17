@@ -60,6 +60,8 @@ export const econRules: SiteRule[] = [
     pick: $ => {
       const $article = $('article .field--name-body .field__item')
       if ($article.length && $article.text().trim().length > 100) return $article
+      const $newsBody = $('.field--name-field-news-body')
+      if ($newsBody.length && $newsBody.text().trim().length > 100) return $newsBody
       const desc = $('meta[property="og:description"]').attr('content')
       if (desc) {
         const $div = $('<div>')
