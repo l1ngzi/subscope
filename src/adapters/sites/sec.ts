@@ -1,4 +1,4 @@
-import { item, sortDesc } from '../../lib.ts'
+import { item, sortDesc, fetchWithCffi } from '../../lib.ts'
 import type { Source, FeedItem } from '../../types.ts'
 
 const THREE_DAYS = 3 * 24 * 60 * 60 * 1000
@@ -21,15 +21,11 @@ export const fetchSEC = async (source: Source): Promise<FeedItem[]> => {
   url.searchParams.set('startdt', new Date(Date.now() - THREE_DAYS).toISOString().slice(0, 10))
   url.searchParams.set('enddt', new Date().toISOString().slice(0, 10))
 
-  const res = await fetch(url.href, {
-    headers: {
-      'User-Agent': 'Subscope/1.0 (personal feed aggregator)',
-      'Accept': 'application/json',
-    },
+  const text = await fetchWithCffi(url.href, 'safari17_0', {
+    'Accept': 'application/json',
+    'User-Agent': 'Subscope/1.0 (personal feed aggregator)',
   })
-  if (!res.ok) throw new Error(`SEC EDGAR: ${res.status}`)
-
-  const data = (await res.json()) as { hits?: { hits?: EdgarHit[] } }
+  const data = JSON.parse(text) as { hits?: { hits?: EdgarHit[] } }
 
   // Deduplicate by accession number — one item per filing
   const seen = new Map<string, EdgarHit['_source']>()

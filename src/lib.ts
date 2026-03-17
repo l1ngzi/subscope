@@ -78,9 +78,10 @@ export const fetchPage = async (url: string): Promise<string> => {
 /** Fetch via curl_cffi (Python) — impersonates Safari/Chrome TLS fingerprint.
  *  Bypasses Azure WAF and other advanced bot detection that checks JA3/JA4.
  *  ASYNC: uses Bun.spawn (not spawnSync) to avoid blocking the event loop. */
-export const fetchWithCffi = async (url: string, impersonate = 'safari17_0'): Promise<string> => {
+export const fetchWithCffi = async (url: string, impersonate = 'safari17_0', headers?: Record<string, string>): Promise<string> => {
   const script = join(import.meta.dir, 'cffi_fetch.py')
-  const proc = Bun.spawn(['python', script, url, impersonate], {
+  const args = ['python', script, url, impersonate, ...(headers ? Object.entries(headers).map(([k, v]) => `${k}:${v}`) : [])]
+  const proc = Bun.spawn(args, {
     stdout: 'pipe', stderr: 'pipe',
   })
   const [stdout, stderr] = await Promise.all([

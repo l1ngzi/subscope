@@ -1,13 +1,11 @@
 import * as cheerio from 'cheerio'
-import { item, sortDesc, UA, TLS } from '../../lib.ts'
+import { item, sortDesc, fetchWithCffi } from '../../lib.ts'
 import type { Source, FeedItem } from '../../types.ts'
 
 const BASE = 'https://home.treasury.gov'
 
 export const fetchTreasury = async (source: Source): Promise<FeedItem[]> => {
-  const $ = cheerio.load(
-    await fetch(source.url, { headers: { 'User-Agent': UA }, ...TLS(source.url) } as any).then(r => r.text())
-  )
+  const $ = cheerio.load(await fetchWithCffi(source.url))
   const items: FeedItem[] = []
   const seen = new Set<string>()
 
