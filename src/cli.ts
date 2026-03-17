@@ -61,27 +61,29 @@ const commands: Record<string, () => Promise<void>> = {
 
     const start = Date.now()
 
-    // Auto-start serve if not running, then proxy through it
+    // Auto-start serve if not running, then proxy through it (SSE streaming)
     try {
       const serverPort = await ensureServe()
-      const proxied = await proxyFetch(serverPort, { group })
+      if (!silent) console.log(`\n  \x1b[2mfetching sources...\x1b[0m`)
+      const proxied = await proxyFetch(serverPort, {
+        group,
+        onResult: silent ? undefined : (r, done, total) => {
+          const sec = (r.ms / 1000).toFixed(1)
+          const slow = r.ms > 5000 ? ` \x1b[33m${sec}s\x1b[0m` : ` \x1b[2m${sec}s\x1b[0m`
+          if (r.error) {
+            console.log(`  \x1b[31m✗\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.error}\x1b[0m${slow}`)
+          } else {
+            const tag = r.added > 0 ? ` \x1b[32m(${r.added} new)\x1b[0m` : ''
+            console.log(`  \x1b[90m${done}/${total}\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.count}\x1b[0m${tag}${slow}`)
+          }
+        },
+      })
       if (proxied) {
-        const { newItems, results } = proxied
         const elapsed = ((Date.now() - start) / 1000).toFixed(1)
         if (silent) {
-          if (newItems > 0) notify('subscope', `${newItems} new item${newItems > 1 ? 's' : ''}`)
+          if (proxied.newItems > 0) notify('subscope', `${proxied.newItems} new item${proxied.newItems > 1 ? 's' : ''}`)
         } else {
-          for (const r of results) {
-            const sec = (r.ms / 1000).toFixed(1)
-            const slow = r.ms > 5000 ? ` \x1b[33m${sec}s\x1b[0m` : ` \x1b[2m${sec}s\x1b[0m`
-            if (r.error) {
-              console.log(`  \x1b[31m✗\x1b[0m ${formatSourceName(r.name)} \x1b[2m— ${r.error}\x1b[0m${slow}`)
-            } else {
-              const tag = r.added > 0 ? ` \x1b[32m(${r.added} new)\x1b[0m` : ''
-              console.log(`  ${formatSourceName(r.name)} \x1b[2m— ${r.count}\x1b[0m${tag}${slow}`)
-            }
-          }
-          console.log(`\n  \x1b[1m${results.length} sources · ${elapsed}s · ${newItems} new \x1b[36m⚡serve\x1b[0m\x1b[0m\n`)
+          console.log(`\n  \x1b[1m${proxied.count} sources · ${elapsed}s · ${proxied.newItems} new \x1b[36m⚡serve\x1b[0m\x1b[0m\n`)
         }
         return
       }

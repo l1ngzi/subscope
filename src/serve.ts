@@ -78,18 +78,28 @@ export const startServer = (port = 0) => {
           return Response.json({ error: 'fetch already in progress' }, { status: 409 })
         }
         fetchInProgress = true
-        try {
-          const group = url.searchParams.get('group') ?? undefined
-          const results: FetchResult[] = []
-          const { newItems } = await fetchAll({
-            group,
-            concurrency: Infinity,
-            onResult: (r) => results.push(r),
-          })
-          return Response.json({ newItems, results })
-        } finally {
-          fetchInProgress = false
-        }
+        const group = url.searchParams.get('group') ?? undefined
+
+        // SSE stream — push each result as it completes
+        const stream = new ReadableStream({
+          async start(controller) {
+            const send = (data: any) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`))
+            try {
+              const { newItems, results } = await fetchAll({
+                group,
+                concurrency: Infinity,
+                onResult: (r, done, total) => send({ type: 'result', r, done, total }),
+              })
+              send({ type: 'done', newItems, count: results.length })
+            } finally {
+              fetchInProgress = false
+              controller.close()
+            }
+          },
+        })
+        return new Response(stream, {
+          headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+        })
       }
 
       if (url.pathname === '/read') {
@@ -171,16 +181,40 @@ export const ensureServe = async (): Promise<number> => {
   throw new Error('Failed to start serve')
 }
 
-/** Proxy a fetch request to the running server */
-export const proxyFetch = async (port: number, opts?: { group?: string }): Promise<{
-  newItems: number
-  results: FetchResult[]
-} | null> => {
+/** Proxy a fetch request to the running server via SSE */
+export const proxyFetch = async (port: number, opts?: {
+  group?: string
+  onResult?: (r: FetchResult, done: number, total: number) => void
+}): Promise<{ newItems: number; count: number } | null> => {
   const params = opts?.group ? `?group=${encodeURIComponent(opts.group)}` : ''
   try {
     const res = await fetch(`http://127.0.0.1:${port}/fetch${params}`, { timeout: 120_000 } as any)
     if (!res.ok) return null
-    return await res.json() as any
+
+    const reader = res.body?.getReader()
+    if (!reader) return null
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let result: { newItems: number; count: number } | null = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop()!
+      for (const line of lines) {
+        const match = line.match(/^data: (.+)$/m)
+        if (!match) continue
+        const data = JSON.parse(match[1])
+        if (data.type === 'result') {
+          opts?.onResult?.(data.r, data.done, data.total)
+        } else if (data.type === 'done') {
+          result = { newItems: data.newItems, count: data.count }
+        }
+      }
+    }
+    return result
   } catch {
     removePortFile()
     return null
