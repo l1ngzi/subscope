@@ -19,9 +19,10 @@ export const fetchTASS = async (source: Source): Promise<FeedItem[]> => {
     if (seen.has(url)) return
     seen.add(url)
 
-    // Title: link text, clean up prefixed category labels
-    let title = $(el).text().trim()
-    // TASS prepends category like "US-Israeli strikes on Iran" before actual title
+    // Title: prefer .news-preview__title (avoids category label concatenation)
+    let title = $(el).find('.news-preview__title').first().text().trim()
+      || $(el).find('h1, h2, h3').first().text().trim()
+      || $(el).text().trim()
     title = title.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()
     if (!title || title.length < 10 || title.length > 300) return
 
