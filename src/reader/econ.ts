@@ -46,6 +46,31 @@ export const econRules: SiteRule[] = [
       'Sec-Fetch-Site': 'none', 'Sec-Fetch-User': '?1',
     },
     title: 'h2, h1, title',
+    pick: $ => {
+      const $body = $('#bodytext').first().clone()
+      if (!$body.length) return $('pre').first().clone()
+      // Convert <pre> blocks to <p> paragraphs, truncate at "Technical Note"
+      $body.find('pre').each((_, el) => {
+        let text = $(el).text()
+        const techIdx = text.indexOf('Technical Note')
+        if (techIdx > 0) text = text.slice(0, techIdx)
+        const $div = $('<div>')
+        text.split(/\n{2,}/).forEach(p => {
+          const t = p.trim().replace(/\n/g, ' ')
+          if (t) $div.append(`<p>${t}</p>`)
+        })
+        $(el).replaceWith($div)
+      })
+      // Strip embargo header
+      const $first = $body.find('p').first()
+      if (/^Transmission of material/i.test($first.text())) $first.remove()
+      // Strip Table N listings, footer links, and metadata
+      $body.children('div, span').each((_, el) => {
+        const t = $(el).text().trim()
+        if (/^Table \d+\./i.test(t) || /^(HTML version|The PDF version|News release charts|Supplemental Files|Table of Contents$|Last Modified)/i.test(t)) $(el).remove()
+      })
+      return $body
+    },
   },
   {
     test: u => u.includes('ecb.europa.eu'),
