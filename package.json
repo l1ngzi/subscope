@@ -1,12 +1,41 @@
 {
-  "name": "subscope",
-  "version": "0.1.0",
+  "name": "@zerozia/subscope",
+  "version": "1.0.0",
+  "description": "First-hand intelligence from 74 official sources in one terminal. AI companies, central banks, financial regulators, global news, energy agencies, international organizations.",
   "module": "src/cli.ts",
   "type": "module",
   "bin": {
     "subscope": "src/cli.ts"
   },
-  "private": true,
+  "files": [
+    "src/",
+    "assets/",
+    "README.md",
+    "LICENSE",
+    "COMMANDS.md"
+  ],
+  "keywords": [
+    "news",
+    "feed",
+    "rss",
+    "intelligence",
+    "cli",
+    "terminal",
+    "bun",
+    "scraper",
+    "aggregator"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/l1ngzi/subscope.git"
+  },
+  "homepage": "https://github.com/l1ngzi/subscope",
+  "bugs": "https://github.com/l1ngzi/subscope/issues",
+  "author": "Lingzi",
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
