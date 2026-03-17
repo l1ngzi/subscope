@@ -226,4 +226,10 @@ export const econRules: SiteRule[] = [
     title: 'h1, title',
     cleanTitle: t => t.replace(/\s*[-–—|]\s*WTO.*$/, '').trim(),
   },
+  {
+    test: u => u.includes('oecd.org'),
+    selector: '[itemprop="articleBody"], .cmp-text, article, main',
+    title: 'h1',
+    cleanTitle: t => t.replace(/\s*[|–—-]\s*OECD$/, '').trim(),
+  },
 ]

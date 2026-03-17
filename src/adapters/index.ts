@@ -35,6 +35,7 @@ import { fetchTASS } from './sites/tass.ts'
 import { fetchReuters } from './sites/reuters.ts'
 import { fetchCFTC } from './sites/cftc.ts'
 import { fetchNATO } from './sites/nato.ts'
+import { fetchOECD } from './sites/oecd.ts'
 import type { SourceAdapter, SourceType } from '../types.ts'
 
 // Site-specific adapters — matched by (hostname, pathPrefix)
@@ -74,6 +75,7 @@ const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[
   { host: 'tass.com', fetch: fetchTASS },
   { host: 'reuters.com', path: '/world/', fetch: fetchReuters },
   { host: 'nato.int', path: '/content/nato/', fetch: fetchNATO },
+  { host: 'oecd.org', path: '/en/about/newsroom', fetch: fetchOECD },
 ]
 
 const matchSite = (url: string): SourceAdapter['fetch'] | undefined => {

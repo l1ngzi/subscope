@@ -47,6 +47,7 @@ const BRAND: [string, number][] = [
   ['cftc', 33], ['cftc.gov', 33],  // before ftc (cftc contains ftc)
   ['ftc', 107], ['ftc.gov', 107],
   ['nato', 27], ['nato.int', 27],
+  ['oecd', 33], ['oecd.org', 33],
 ]
 
 const sourceColor = (name: string, _type: string, group?: string): string => {
@@ -132,6 +133,7 @@ const DISPLAY: [string, string][] = [
   ['ec.europa.eu', 'EU Commission'],
   ['cftc.gov', 'CFTC'], ['ftc.gov', 'FTC'],  // cftc before ftc
   ['nato.int', 'NATO'],
+  ['oecd.org', 'OECD'],
 ]
 
 export const formatSourceName = (name: string): string => {

@@ -111,6 +111,7 @@ export const SOURCE_REGISTRY: SourceDef[] = [
 
   // ── International Organizations ── (continued)
   S('https://www.nato.int/content/nato/en/news-and-events/articles/news/jcr:content/root/container/general_search.search.json', 'intl/nato'),
+  S('https://www.oecd.org/en/about/newsroom.html', 'intl/oecd'),
 
   // ── Regulation ──
   S('https://ec.europa.eu/commission/presscorner/home/en', 'reg/eu'),
