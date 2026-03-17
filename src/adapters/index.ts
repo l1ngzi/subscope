@@ -12,7 +12,7 @@ import { fetchNBS } from './sites/nbs.ts'
 import { fetchSEC } from './sites/sec.ts'
 import { fetchBEA } from './sites/bea.ts'
 import { fetchBLS } from './sites/bls.ts'
-import { fetchTreasury } from './sites/treasury.ts'
+// treasury: uses RSS via generic website adapter
 import { fetchIMF } from './sites/imf.ts'
 import { fetchMOF } from './sites/mof.ts'
 import { fetchSAFE } from './sites/safe.ts'
@@ -47,7 +47,6 @@ const siteRules: { host: string; path?: string; fetch: SourceAdapter['fetch'] }[
   { host: 'efts.sec.gov', fetch: fetchSEC },
   { host: 'bea.gov', fetch: fetchBEA },
   { host: 'bls.gov', fetch: fetchBLS },
-  { host: 'home.treasury.gov', fetch: fetchTreasury },
   { host: 'imf.org', fetch: fetchIMF },
   { host: 'mof.gov.cn', fetch: fetchMOF },
   { host: 'safe.gov.cn', fetch: fetchSAFE },

@@ -62,7 +62,7 @@ export const SOURCE_REGISTRY: SourceDef[] = [
   S('https://efts.sec.gov/LATEST/search-index?q=%22%22&forms=8-K', 'econ/sec'),
   S('https://www.bea.gov/news/current-releases', 'econ/bea'),
   S('https://www.bls.gov/feed/bls_latest.rss', 'econ/bls'),
-  S('https://home.treasury.gov/news/press-releases', 'econ/treasury'),
+  S('https://home.treasury.gov/rss.xml', 'econ/treasury'),
   S('https://www.imf.org/en/News', 'econ/imf'),
 
   // ── News / China ──
