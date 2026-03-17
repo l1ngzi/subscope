@@ -70,6 +70,7 @@ export const SOURCE_REGISTRY: SourceDef[] = [
   S('https://www.bls.gov/feed/bls_latest.rss', 'econ/bls'),
   S('https://home.treasury.gov/news/press-releases', 'econ/treasury'),
   S('https://www.imf.org/en/News', 'econ/imf'),
+  S('https://www.consumerfinance.gov/about-us/newsroom/feed/', 'econ/cfpb'),
 
   // ── News / China ──
   S('https://news.cctv.com/world/', 'news/cctv'),

@@ -170,6 +170,12 @@ export const econRules: SiteRule[] = [
     },
   },
   {
+    test: u => u.includes('consumerfinance.gov'),
+    selector: '.m-full-width-text, article, main',
+    title: 'h1',
+    cleanTitle: t => t.replace(/\s*[|–—]\s*Consumer Financial Protection Bureau$/, '').trim(),
+  },
+  {
     test: u => u.includes('iaea.org'),
     selector: 'article, .field--name-body',
     title: 'h1',
@@ -177,10 +183,22 @@ export const econRules: SiteRule[] = [
   },
   // EU Presscorner: handled via JSON API in reader/index.ts (Angular SPA bypass)
   {
+    test: u => u.includes('cftc.gov'),  // before ftc.gov (cftc.gov contains ftc.gov)
+    selector: 'article .field--name-body',
+    title: 'title',
+    cleanTitle: t => t.replace(/\s*\|\s*CFTC$/, '').trim(),
+  },
+  {
     test: u => u.includes('ftc.gov'),
     selector: '.node__content .field--name-body',
     title: 'h1.node-title',
     cleanTitle: t => t.replace(/\s*\|\s*(Federal Trade Commission|FTC)$/, '').trim(),
+  },
+  {
+    test: u => u.includes('nato.int'),
+    selector: '.ca04-rich-text',
+    title: 'h1',
+    cleanTitle: t => t.replace(/\s*[-–—]\s*NATO$/, '').replace(/^NATO\s*[-–—]\s*/, '').trim(),
   },
   {
     test: u => u.includes('news.un.org'),
