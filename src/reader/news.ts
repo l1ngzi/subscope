@@ -149,6 +149,13 @@ export const newsRules: SiteRule[] = [
     selector: '.detay-icerik, article',
     title: 'h1',
     cleanTitle: t => t.replace(/\s*[|–—]\s*Anadolu Aj?[ae]n[sc][ıi].*$/, '').trim(),
+    pick: $ => {
+      const $body = $('.detay-icerik').first().clone()
+      // Strip empty headings, share section, related topics, subscription notice
+      $body.find('.detay-paylas, h6').remove()
+      $body.find('a[href*="subscription"]').each((_, el) => $(el).parent().remove())
+      return $body
+    },
   },
   {
     test: u => u.includes('nhk.or.jp') || u.includes('nhk.jp'),
