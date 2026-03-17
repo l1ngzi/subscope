@@ -6,7 +6,7 @@ A super subscription that merges multiple first-hand sources into one terminal f
 
 First-hand information from official sources only — no intermediaries, no aggregators, no SEO-polluted search results. Five dimensions: AI companies, central banks & financial regulators, global official media, energy agencies, and international organizations.
 
-69 sources across 6 groups: AI (Anthropic, Claude, OpenAI, Google AI, NVIDIA, DeepMind, DeepSeek, xAI), economics (Fed, ECB, PBOC, BOJ, NBS, BLS, BEA, SEC, Treasury, IMF, CSRC, MOF, SAFE, NFRA, CFPB), global news (BBC, France24, DW, NHK, Al Jazeera, Reuters, TASS, Yonhap, AP, ABC Australia, CBC, CCTV, Xinhua, People's Daily, Focus Taiwan, The Hindu, Anadolu Agency, CNA), energy (IEA, EIA, DOE, OPEC, IRENA), international orgs (UN, WHO, IAEA, WTO), regulation (EU Commission, FTC, FCC). All sources hardcoded in `src/sources.ts`.
+71 sources across 6 groups: AI (Anthropic, Claude, OpenAI, Google AI, NVIDIA, DeepMind, DeepSeek, xAI), economics (Fed, ECB, PBOC, BOJ, BOE, NBS, BLS, BEA, SEC, Treasury, IMF, CSRC, MOF, SAFE, NFRA, CFPB), global news (BBC, France24, DW, NHK, Al Jazeera, Reuters, TASS, Yonhap, AP, ABC Australia, CBC, CCTV, Xinhua, People's Daily, Focus Taiwan, The Hindu, Anadolu Agency, CNA), energy (IEA, EIA, DOE, OPEC, IRENA), international orgs (UN, WHO, IAEA, WTO, World Bank), regulation (EU Commission, FTC, FCC). All sources hardcoded in `src/sources.ts`.
 
 ## Quick start
 
@@ -35,7 +35,7 @@ subscope                     # interactive browser with search
 subscope                     # browse items (up/down, enter to open, / to search, g for PDF)
 subscope ai                  # AI company websites (default mode)
 subscope quick               # social media only (X + YouTube)
-subscope eco                 # economics & finance (15 sources)
+subscope eco                 # economics & finance (16 sources)
 subscope glob                # global news (18 sources)
 subscope -g energy           # energy sources (5 sources)
 subscope -g reg              # regulation (EU Commission, FTC, FCC)
@@ -103,7 +103,7 @@ Source (hardcoded registry) --> Adapter (fetch + parse) --> Store (SQLite) --> R
                               Serve daemon (warm pool)    CLI or daemon
 ```
 
-Site-specific adapters: Anthropic (Sanity CMS GROQ API), Claude blog (HTML), Claude support (Intercom), DeepSeek (changelog HTML), xAI (news page), PBOC (HTML scrape), NBS (RSS + HTML), BLS (RSS indicator parser), BEA (HTML scrape), SEC EDGAR (JSON API via cffi), US Treasury (HTML scrape), IMF (cffi with Safari TLS), CSRC (UCAP JSON API), MOF (HTML scrape), SAFE (HTML scrape), NFRA (JSON API), CCTV (JSONP API), NHK (JSON API), Reuters (HTML via cffi, Datadome bypass), OPEC (HTML via curl), IRENA (HTML via cffi), TASS (HTML via cffi), EU Commission (JSON API), FTC (RSS), FCC (HTML via cffi, Akamai bypass).
+Site-specific adapters: Anthropic (Sanity CMS GROQ API), Claude blog (HTML), Claude support (Intercom), DeepSeek (changelog HTML), xAI (news page), PBOC (HTML scrape), NBS (RSS + HTML), BLS (RSS indicator parser), BEA (HTML scrape), SEC EDGAR (JSON API via cffi), US Treasury (HTML scrape), IMF (cffi with Safari TLS), CSRC (UCAP JSON API), MOF (HTML scrape), SAFE (HTML scrape), NFRA (JSON API), BOE (RSS via cffi), CCTV (JSONP API), NHK (JSON API), Reuters (HTML via cffi, Datadome bypass), OPEC (HTML via curl), IRENA (HTML via cffi), TASS (HTML via cffi), World Bank (JSON API via cffi), EU Commission (JSON API), FTC (RSS), FCC (HTML via cffi, Akamai bypass).
 
 Generic adapters: RSS/Atom feeds (auto-detect XML), HTML scraping (link extraction), YouTube (ytInitialData JSON), X/Twitter (Guest Token + GraphQL API), GitHub (Atom release feeds).
 
@@ -130,6 +130,7 @@ econ/
   ecb         (European Central Bank press releases, speeches)
   pboc        (中国人民银行 news, financial data reports)
   boj         (Bank of Japan policy, statements)
+  boe         (Bank of England news, monetary policy, RSS via cffi)
   nbs         (国家统计局 CPI, GDP, PMI data releases)
   bls         (Bureau of Labor Statistics CPI, unemployment, payrolls)
   bea         (Bureau of Economic Analysis GDP, personal income, trade)
@@ -154,6 +155,7 @@ energy/
 intl/
   un, who, iaea
   wto         (news via JS data file, not RSS)
+  worldbank   (World Bank news, JSON API via cffi)
 reg/
   eu          (EU Commission press releases, JSON API)
   ftc         (FTC press releases, RSS)

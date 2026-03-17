@@ -10,7 +10,7 @@ subscope is a personal CLI intelligence feed. It pulls first-hand information fr
 
 - Pure raw information, no AI processing in the feed pipeline
 - Each source gets the best possible adapter, not a generic one
-- Fast: 63 sources fetch via serve daemon (warm connections, unlimited concurrency) or 12 cold workers in ~3 seconds
+- Fast: 65 sources fetch via serve daemon (warm connections, unlimited concurrency) or 12 cold workers in ~3 seconds
 - Playwright as last-resort fallback in reader pipeline only (no feed adapter requires it), not in the hot path
 - Code should read like it was written by someone who cares
 
@@ -61,6 +61,7 @@ src/
       mof.ts                Ministry of Finance news scraper (财政部)
       safe.ts               State Administration of Foreign Exchange scraper (外汇管理局)
       nfra.ts               National Financial Regulatory Administration (JSON API)
+      boe.ts                Bank of England RSS feed via cffi
       boj.ts                Bank of Japan speeches/press HTML scraper
       apnews.ts             AP News hub page scraper (date from URL slug)
       eia.ts                EIA RSS feed via cffi
@@ -73,6 +74,7 @@ src/
       irena.ts              IRENA news (HTML via cffi)
       reuters.ts            Reuters world news (HTML via cffi, Datadome bypass)
       tass.ts               TASS news (HTML via cffi)
+      worldbank.ts          World Bank JSON API via cffi
       cctv.ts               CCTV JSONP cmsdatainterface API
       xinhua.ts             Xinhua news scraper (/china/ → /politics/)
       people.ts             People's Daily scraper
@@ -110,7 +112,7 @@ Path-based strings: `ai/anthropic`, `econ/fed`, `news/bbc`. Filtering with `-g a
 Alternate screen buffer. Item-by-item navigation with auto-scrolling viewport. Search box at top (cursor = -1). NEW badges tracked via `seen.json`. PDF download via URL pattern matching (Nature `.pdf` suffix, arXiv `/pdf/` path).
 
 ### Economics & Finance sources
-Fifteen sources under the `econ/` group: Federal Reserve (RSS), ECB (RSS), PBOC (HTML scrape), BOJ (HTML scrape), NBS (RSS/HTML), BLS (RSS with `Sec-Fetch-*` headers), BEA (HTML scrape), SEC EDGAR (JSON API via cffi), US Treasury (HTML scrape), IMF (cffi with Safari TLS), CSRC (UCAP JSON API), MOF (HTML scrape), SAFE (HTML scrape), NFRA (JSON API — `/cn/static/data/DocInfo/` endpoint, no Playwright needed), CFPB (RSS). Most have dedicated adapters; CFPB uses the generic website adapter.
+Sixteen sources under the `econ/` group: Federal Reserve (RSS), ECB (RSS), PBOC (HTML scrape), BOJ (HTML scrape), BOE (RSS via cffi — Bun TLS can't connect to bankofengland.co.uk), NBS (RSS/HTML), BLS (RSS with `Sec-Fetch-*` headers), BEA (HTML scrape), SEC EDGAR (JSON API via cffi), US Treasury (HTML scrape), IMF (cffi with Safari TLS), CSRC (UCAP JSON API), MOF (HTML scrape), SAFE (HTML scrape), NFRA (JSON API — `/cn/static/data/DocInfo/` endpoint, no Playwright needed), CFPB (RSS). Most have dedicated adapters; CFPB uses the generic website adapter.
 
 ### Global news sources
 Eighteen sources under the `news/` group: BBC (RSS), France24 (RSS), DW (RSS), NHK (JSON API), Al Jazeera (RSS), TASS (HTML via cffi — RSS is dead/stale), Reuters (HTML via cffi — Datadome anti-bot, dates from URL slugs), Yonhap (RSS), AP News (HTML scrape), ABC Australia (RSS), CBC (RSS), Focus Taiwan (RSS), The Hindu (RSS), Anadolu Agency (RSS), CNA/Channel NewsAsia (RSS), CCTV (JSONP cmsdatainterface API), Xinhua (HTML scrape, /china/ remapped to /politics/), People's Daily (HTML scrape). Chinese news sources use `dateOnlyToISO` for date-only URLs (noon local time, avoids UTC midnight sort issues).
@@ -119,7 +121,7 @@ Eighteen sources under the `news/` group: BBC (RSS), France24 (RSS), DW (RSS), N
 Five sources under `energy/`: IEA (HTML scrape from iea.org/news), EIA (RSS via cffi — Bun's TLS blocked by eia.gov), DOE (energy.gov/newsroom, generic website adapter), OPEC (HTML scrape via curl — Cloudflare blocks Bun's BoringSSL), IRENA (HTML scrape via cffi — Azure WAF blocks Chrome TLS fingerprint).
 
 ### International organization sources
-Four sources under `intl/`: UN News (RSS), WHO (RSS), IAEA (dedicated adapter scraping h3.card__title links from pressreleases page), WTO (dedicated adapter parsing /library/news/news_YYYY_e.js data file — structured JS objects with titles, summaries, dates).
+Five sources under `intl/`: UN News (RSS), WHO (RSS), IAEA (dedicated adapter scraping h3.card__title links from pressreleases page), WTO (dedicated adapter parsing /library/news/news_YYYY_e.js data file — structured JS objects with titles, summaries, dates), World Bank (JSON API via cffi at `search.worldbank.org/api/v2/news` — documents object with cdata-wrapped title/description).
 
 ### Regulation sources
 Three sources under `reg/`: EU Commission (JSON API at `ec.europa.eu/commission/presscorner/api/search`, filtered to press releases), FTC (RSS feed at ftc.gov/feeds/press-release.xml), FCC (dedicated adapter scraping `/document/` links from headlines page via cffi — Akamai geo-blocking bypass).
@@ -130,7 +132,7 @@ Three sources under `reg/`: EU Commission (JSON API at `ec.europa.eu/commission/
 ### Article reader (`subscope read`)
 Pipe-friendly full-text extractor for LLM consumption. Output: `# Title\n\ntext`. Per-site CSS selectors for all blog-type sources:
 - **AI**: Anthropic (CSS modules `Body-module`), Claude blog (`.u-rich-text-blog`), Claude Support (`.article_body`), OpenAI (`article`), Google AI Blog (`article` with AI-summary strip), NVIDIA (`article-body`), DeepMind (`main`), DeepSeek (`.theme-doc-markdown`), xAI (`.prose.prose-invert`)
-- **Econ**: Fed (`#article .col-sm-8`), ECB (`main .section`), PBOC (`#zoom`), BOJ (`div.outline`), NBS (`.txt-content`), BLS (`#bodytext` with `<pre>` conversion, Sec-Fetch headers), BEA (`.field--name-body`), Treasury (`og:description` meta fallback), IMF (`article .column-padding`), SEC EDGAR (auto-follow `-index.htm` → document, company name from submissions API), CSRC (`.detail-news`), MOF (`.xwfb_content`), SAFE (`.detail_content`), NFRA (Angular auto-detect → Playwright networkidle in reader), CFPB (`.m-full-width-text`), EIA (`.tie-article` via cffi), IEA (`article` with metadata strip), IAEA (`article, .field--name-body`), WTO (`.centerCol`), EU (JSON API bypass for Angular SPA), FTC (`.node__content .field--name-body`), FCC (`article, main` — Akamai-protected, cffi/Playwright fallback), UN News (`.paragraph--type--one-column-text`), WHO (`article`)
+- **Econ**: Fed (`#article .col-sm-8`), ECB (`main .section`), PBOC (`#zoom`), BOJ (`div.outline`), BOE (`.page-content, .content-block`), NBS (`.txt-content`), BLS (`#bodytext` with `<pre>` conversion, Sec-Fetch headers), BEA (`.field--name-body`), Treasury (`og:description` meta fallback), IMF (`article .column-padding`), SEC EDGAR (auto-follow `-index.htm` → document, company name from submissions API), CSRC (`.detail-news`), MOF (`.xwfb_content`), SAFE (`.detail_content`), NFRA (Angular auto-detect → Playwright networkidle in reader), CFPB (`.m-full-width-text`), EIA (`.tie-article` via cffi), IEA (`article` with metadata strip), IAEA (`article, .field--name-body`), WTO (`.centerCol`), World Bank (`article.lp__body_content`), EU (JSON API bypass for Angular SPA), FTC (`.node__content .field--name-body`), FCC (`article, main` — Akamai-protected, cffi/Playwright fallback), UN News (`.paragraph--type--one-column-text`), WHO (`article`)
 - **News**: BBC (`data-component` text blocks), France24 (`.t-content__body`), DW (`.rich-text`), NHK (generic fallback), Al Jazeera (`.wysiwyg`), Reuters (`article, main` via cffi — Datadome-protected), TASS (`.text-content`), Yonhap (`article.story-news > p`), AP News (`.RichTextStoryBody`), ABC Australia (`engagement_target`), CBC (`.story > p/h2`), Focus Taiwan (`.PrimarySide .paragraph`), The Hindu (`.articlebodycontent`), Anadolu Agency (`.detay-icerik`), CNA (`.content-wrapper`), People's Daily (`.rm_txt_con`), CCTV (`.content_area`), Xinhua (`#detailContent`)
 - **Other**: GitHub releases (`[data-test-selector="body-content"]`)
 - Anti-bot bypass: Playwright (last-resort fallback in reader) spawns system Chrome with `--disable-blink-features=AutomationControlled`, `navigator.webdriver=false`, `--ignore-certificate-errors`
