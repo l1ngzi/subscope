@@ -94,9 +94,16 @@ export const startServer = (port = 0) => {
       }
 
       if (url.pathname === '/content') {
-        const rawIds = url.searchParams.getAll('itemId').concat(
+        let rawIds: string[] = url.searchParams.getAll('itemId').concat(
           (url.searchParams.get('itemIds') ?? '').split(/[,;\s]+/).filter(Boolean)
         )
+        if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers.get('content-type')?.includes('application/json')) {
+          try {
+            const body = (await req.json()) as any
+            const fromBody = Array.isArray(body) ? body : (body?.itemIds ?? body?.itemId ? [body.itemId].flat() : [])
+            rawIds = rawIds.concat(fromBody.map((id: any) => String(id).trim()).filter(Boolean))
+          } catch {}
+        }
         if (!rawIds.length) {
           return Response.json({ error: 'missing itemId(s)' }, { status: 400 })
         }
