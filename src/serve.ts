@@ -4,6 +4,8 @@
 
 import { fetchAll, read, type FetchResult, type ReadOpts } from './pipeline.ts'
 import { load } from './config.ts'
+import { createStore } from './store.ts'
+import { readArticle } from './reader/index.ts'
 import { DIR } from './lib.ts'
 import { join } from 'path'
 import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs'
@@ -77,6 +79,42 @@ export const startServer = (port = 0) => {
       if (url.pathname === '/config') {
         const config = load()
         return Response.json(config)
+      }
+
+      if (url.pathname === '/items') {
+        const sourceId = url.searchParams.get('sourceId') ?? url.searchParams.get('id')
+        const n = parseInt(url.searchParams.get('limit') ?? url.searchParams.get('n') ?? '10')
+        if (!sourceId) {
+          return Response.json({ error: 'missing sourceId' }, { status: 400 })
+        }
+        const store = createStore()
+        const items = store.query({ sourceIds: [sourceId], limit: Math.max(1, Math.min(n, 500)) })
+        store.close()
+        return Response.json({ items })
+      }
+
+      if (url.pathname === '/content') {
+        const rawIds = url.searchParams.getAll('itemId').concat(
+          (url.searchParams.get('itemIds') ?? '').split(/[,;\s]+/).filter(Boolean)
+        )
+        if (!rawIds.length) {
+          return Response.json({ error: 'missing itemId(s)' }, { status: 400 })
+        }
+        const itemIds = [...new Set(rawIds)].slice(0, 20)
+        const store = createStore()
+        const items = store.getByIds(itemIds)
+        store.close()
+        const notFound = itemIds.filter((id) => !items.some((it) => it.id === id))
+        const results = await Promise.allSettled(
+          items.map(async (item) => {
+            const { title, text } = await readArticle(item.url)
+            return { itemId: item.id, url: item.url, title, text }
+          })
+        )
+        const contents = results.map((r, i) =>
+          r.status === 'fulfilled' ? r.value : { itemId: items[i]!.id, error: (r as PromiseRejectedResult).reason?.message }
+        )
+        return Response.json({ contents, notFound })
       }
 
       if (url.pathname === '/fetch') {

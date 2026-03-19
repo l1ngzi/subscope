@@ -109,6 +109,12 @@ export const createStore = (dbPath = DB_PATH) => {
       return (db.prepare(`SELECT COUNT(*) as n FROM items ${where}`).get(...params) as { n: number }).n
     },
 
+    getByIds(ids: string[]): FeedItem[] {
+      if (!ids.length) return []
+      const placeholders = ids.map(() => '?').join(',')
+      return db.prepare(`SELECT * FROM items WHERE id IN (${placeholders})`).all(...ids) as FeedItem[]
+    },
+
     removeBySource(sourceId: string) {
       db.run('DELETE FROM items WHERE sourceId = ?', [sourceId])
     },
