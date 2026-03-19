@@ -6,7 +6,7 @@ First-hand intelligence from 74 official sources in one terminal. AI companies, 
 
 ### 1. Bun (runtime)
 
-subscope runs on [Bun](https://bun.sh), not Node.js.
+subscope runs on [Bun](https://bun.sh)
 
 ```bash
 # Windows (PowerShell)
