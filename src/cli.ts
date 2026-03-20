@@ -182,7 +182,12 @@ Write-Output "ok"
       try {
         const res = await fetch(`http://127.0.0.1:${port}/health`)
         const data = await res.json() as any
+        let meta: { fetchApiPort?: number } = {}
+        try {
+          meta = JSON.parse(readFileSync(join(DIR, 'serve.json'), 'utf-8'))
+        } catch {}
         console.log(`\n  Server running on port ${port}`)
+        if (meta.fetchApiPort) console.log(`  Fetch API (external) on port ${meta.fetchApiPort}`)
         console.log(`  PID ${data.pid} · uptime ${Math.floor(data.uptime)}s\n`)
       } catch {
         console.log('\n  Server not responding (stale port file).\n')
@@ -191,7 +196,24 @@ Write-Output "ok"
     }
 
     // Default: start server
-    const port = parseInt(sub ?? '0') || 0
+    let port = 0
+    let fetchApiPort = parseInt(process.env.SUBSCOPE_FETCH_PORT || '', 10)
+    if (isNaN(fetchApiPort) || fetchApiPort <= 0) fetchApiPort = 0
+    let mainPortSeen = false
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i]!
+      if (a === '--api-port' || a === '-a') {
+        const v = parseInt(args[++i] ?? '', 10)
+        if (!isNaN(v) && v > 0) fetchApiPort = v
+        continue
+      }
+      if (a === 'stop' || a === 'status') continue
+      const n = parseInt(a, 10)
+      if (!isNaN(n) && String(n) === a && !mainPortSeen) {
+        port = n
+        mainPortSeen = true
+      }
+    }
     const existing = getServerPort()
     if (existing) {
       try {
@@ -202,7 +224,7 @@ Write-Output "ok"
         // Stale port file, start fresh
       }
     }
-    startServer(port)
+    startServer(port, fetchApiPort > 0 ? { fetchApiPort } : undefined)
     await new Promise(() => {}) // keep alive
   },
 

@@ -13,8 +13,16 @@ import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs'
 const PORT_FILE = join(DIR, 'serve.json')
 const ICON_PATH = join(import.meta.dir, '..', 'assets', 'icon.ico').replace(/\//g, '\\')
 
-const writePortFile = (port: number) => {
-  writeFileSync(PORT_FILE, JSON.stringify({ port, pid: process.pid, startedAt: new Date().toISOString() }))
+const writePortFile = (port: number, fetchApiPort?: number) => {
+  writeFileSync(
+    PORT_FILE,
+    JSON.stringify({
+      port,
+      ...(fetchApiPort ? { fetchApiPort } : {}),
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+    })
+  )
 }
 
 const removePortFile = () => {
@@ -60,10 +68,58 @@ const stopTray = () => {
   try { trayProc?.kill() } catch {}
 }
 
+// ── Fetch SSE (shared by localhost + optional external API port) ──
+
+type FetchLock = { busy: boolean }
+
+const createFetchSseResponse = (lock: FetchLock, group?: string): Response => {
+  if (lock.busy) {
+    return Response.json({ error: 'fetch already in progress' }, { status: 409 })
+  }
+  lock.busy = true
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: any) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`))
+      try {
+        const { newItems, results } = await fetchAll({
+          group,
+          concurrency: Infinity,
+          onResult: (r, done, total) => send({ type: 'result', r, done, total }),
+        })
+        send({ type: 'done', newItems, count: results.length })
+      } finally {
+        lock.busy = false
+        controller.close()
+      }
+    },
+  })
+  return new Response(stream, {
+    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+  })
+}
+
+const corsApiHeaders = (): Record<string, string> => ({
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+})
+
+const externalFetchAuthorized = (req: Request, url: URL, token: string | undefined): boolean => {
+  if (!token) return true
+  const auth = req.headers.get('authorization')
+  if (auth === `Bearer ${token}`) return true
+  const q = url.searchParams.get('token')
+  if (q === token) return true
+  return false
+}
+
 // ── Server ──
 
-export const startServer = (port = 0) => {
-  let fetchInProgress = false
+export const startServer = (port = 0, opts?: { fetchApiPort?: number }) => {
+  const fetchLock: FetchLock = { busy: false }
+  const fetchApiPort = opts?.fetchApiPort && opts.fetchApiPort > 0 ? opts.fetchApiPort : 0
+  const fetchApiToken = process.env.SUBSCOPE_FETCH_TOKEN?.trim() || undefined
+  let fetchApiServer: ReturnType<typeof Bun.serve> | null = null
 
   const server = Bun.serve({
     port,
@@ -125,32 +181,8 @@ export const startServer = (port = 0) => {
       }
 
       if (url.pathname === '/fetch') {
-        if (fetchInProgress) {
-          return Response.json({ error: 'fetch already in progress' }, { status: 409 })
-        }
-        fetchInProgress = true
         const group = url.searchParams.get('group') ?? undefined
-
-        // SSE stream — push each result as it completes
-        const stream = new ReadableStream({
-          async start(controller) {
-            const send = (data: any) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`))
-            try {
-              const { newItems, results } = await fetchAll({
-                group,
-                concurrency: Infinity,
-                onResult: (r, done, total) => send({ type: 'result', r, done, total }),
-              })
-              send({ type: 'done', newItems, count: results.length })
-            } finally {
-              fetchInProgress = false
-              controller.close()
-            }
-          },
-        })
-        return new Response(stream, {
-          headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-        })
+        return createFetchSseResponse(fetchLock, group)
       }
 
       if (url.pathname === '/read') {
@@ -168,6 +200,7 @@ export const startServer = (port = 0) => {
       if (url.pathname === '/stop') {
         removePortFile()
         stopTray()
+        try { fetchApiServer?.stop() } catch {}
         setTimeout(() => process.exit(0), 100)
         return Response.json({ status: 'stopping' })
       }
@@ -178,13 +211,52 @@ export const startServer = (port = 0) => {
 
   const actualPort = server.port ?? port
   if (actualPort === 0) throw new Error('Server could not bind to a port')
-  writePortFile(actualPort)
+  if (fetchApiPort > 0 && fetchApiPort === actualPort) {
+    throw new Error(`fetch API port ${fetchApiPort} must differ from main serve port`)
+  }
+
+  if (fetchApiPort > 0) {
+    fetchApiServer = Bun.serve({
+      port: fetchApiPort,
+      hostname: '0.0.0.0',
+      fetch: async (req) => {
+        const url = new URL(req.url)
+        if (req.method === 'OPTIONS') {
+          return new Response(null, { status: 204, headers: corsApiHeaders() })
+        }
+        if (!externalFetchAuthorized(req, url, fetchApiToken)) {
+          return Response.json({ error: 'unauthorized' }, { status: 401, headers: corsApiHeaders() })
+        }
+        if (url.pathname === '/health') {
+          return Response.json(
+            { status: 'ok', pid: process.pid, uptime: process.uptime(), role: 'fetch-api' },
+            { headers: corsApiHeaders() }
+          )
+        }
+        if (url.pathname === '/fetch') {
+          const group = url.searchParams.get('group') ?? undefined
+          const res = createFetchSseResponse(fetchLock, group)
+          const h = new Headers(res.headers)
+          for (const [k, v] of Object.entries(corsApiHeaders())) h.set(k, v)
+          return new Response(res.body, { status: res.status, headers: h })
+        }
+        return Response.json({ error: 'not found' }, { status: 404, headers: corsApiHeaders() })
+      },
+    })
+  }
+
+  writePortFile(actualPort, fetchApiPort > 0 ? fetchApiPort : undefined)
   startTray(actualPort)
 
-  process.on('SIGINT', () => { removePortFile(); stopTray(); process.exit(0) })
-  process.on('SIGTERM', () => { removePortFile(); stopTray(); process.exit(0) })
+  process.on('SIGINT', () => { removePortFile(); stopTray(); fetchApiServer?.stop(); process.exit(0) })
+  process.on('SIGTERM', () => { removePortFile(); stopTray(); fetchApiServer?.stop(); process.exit(0) })
 
   console.log(`\n  subscope serve listening on http://127.0.0.1:${actualPort}`)
+  if (fetchApiPort > 0) {
+    console.log(`  fetch API (all interfaces) · http://0.0.0.0:${fetchApiPort}/fetch  SSE, same protocol as localhost`)
+    if (fetchApiToken) console.log(`  fetch API auth: Bearer token or ?token=  (SUBSCOPE_FETCH_TOKEN)`)
+    else console.log(`  \x1b[33mwarning:\x1b[0m fetch API has no token — set SUBSCOPE_FETCH_TOKEN for production`)
+  }
   console.log(`  PID ${process.pid} · stop with: subscope serve stop\n`)
 
   return server
